@@ -50,3 +50,15 @@ export const verification = pgTable("verification", {
 	createdAt: timestamp("createdAt"),
 	updatedAt: timestamp("updatedAt"),
 });
+
+export const project = pgTable("project", {
+	id: text("id").primaryKey(),
+	repoId: text("repoId").notNull(),
+	githubUrl: text("githubUrl").notNull(),
+	gradientKbId: text("gradientKbId").notNull(),
+	userId: text("userId")
+		.notNull()
+		.references(() => user.id),
+	createdAt: timestamp("createdAt").notNull().defaultNow(),
+	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
