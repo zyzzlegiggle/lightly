@@ -5,6 +5,18 @@ import { project } from "@/lib/schema";
 import { account } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 
+export async function GET() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const projects = await db.query.project.findMany({
+    where: eq(project.userId, session.user.id),
+    orderBy: (p, { desc }) => [desc(p.createdAt)],
+  });
+  return Response.json({ projects });
+}
+
 export async function POST(req: Request) {
   const session = await auth.api.getSession({
     headers: await headers()
@@ -31,6 +43,18 @@ export async function POST(req: Request) {
       return Response.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // ── Guard: same repo can't be linked twice ──
+    const dupeRepo = await db.query.project.findFirst({
+      where: and(eq(project.repoId, repoId), eq(project.userId, session.user.id)),
+    });
+
+    if (dupeRepo) {
+      return Response.json(
+        { error: "This repository is already linked." },
+        { status: 409 }
+      );
+    }
+
     // Call Python FastAPI backend to start indexing into DigitalOcean Knowledge Base
     const pyResp = await fetch("http://localhost:8000/api/projects/sync", {
       method: "POST",
@@ -43,14 +67,23 @@ export async function POST(req: Request) {
     let appSpecRaw = null;
 
     if (!pyResp.ok) {
-      console.warn("FastAPI backend failed to start sync", await pyResp.text());
-    } else {
-      const pyData = await pyResp.json();
-      console.log("Started python indexing & DO App Platform build", pyData);
-      liveUrl = pyData.liveUrl || "";
-      doAppId = pyData.doAppId;
-      appSpecRaw = pyData.appSpecRaw;
+      const errText = await pyResp.text();
+      console.error("FastAPI backend failed:", errText);
+      return Response.json({ error: "Failed to create sandbox. Is the backend running?" }, { status: 502 });
     }
+
+    const pyData = await pyResp.json();
+
+    // The sync endpoint catches errors and returns { error: "..." }
+    if (pyData.error) {
+      console.error("Droplet creation error:", pyData.error);
+      return Response.json({ error: pyData.error }, { status: 502 });
+    }
+
+    console.log("Droplet creation started:", pyData);
+    liveUrl = pyData.liveUrl || "";
+    doAppId = pyData.doAppId;
+    appSpecRaw = pyData.appSpecRaw;
 
     // Mock Gradient ID for now
     const gradientKbId = `kb-mock-${Date.now()}`;

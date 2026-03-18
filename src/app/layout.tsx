@@ -10,6 +10,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Lightly - Built for Designers",
   description: "Modify app design without worrying about code.",
+  icons: "/logo.png",
 };
 
 export default function RootLayout({

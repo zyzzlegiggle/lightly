@@ -18,6 +18,8 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
   // New Step States
   const [selectedRepo, setSelectedRepo] = useState<any | null>(null);
   const [branch, setBranch] = useState("");
+  const [branches, setBranches] = useState<any[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const [envVars, setEnvVars] = useState([{ key: "", value: "" }]);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
 
@@ -61,9 +63,21 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
     }
   };
   
-  const handleSelectRepo = (repo: any) => {
+  const handleSelectRepo = async (repo: any) => {
     setSelectedRepo(repo);
     setBranch(repo.default_branch || "main");
+    setLoadingBranches(true);
+    try {
+      const res = await fetch(`/api/repos/branches?fullName=${repo.full_name}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBranches(data.branches || []);
+      }
+    } catch {
+      setBranches([]);
+    } finally {
+      setLoadingBranches(false);
+    }
   };
 
   const handleEnvChange = (index: number, field: "key" | "value", val: string) => {
@@ -96,7 +110,8 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
         })
       });
       if (!res.ok) {
-        throw new Error("Failed to link project");
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || "Failed to link project");
       }
       
       const { project, liveUrl } = await res.json();
@@ -213,13 +228,29 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
             <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-6">
               <div>
                 <label className="block text-sm font-bold text-text-primary mb-2">Branch to Deploy</label>
-                <input 
-                  type="text" 
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="main"
-                  className="w-full border border-border-subtle rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-all"
-                />
+                {loadingBranches ? (
+                  <div className="w-full border border-border-subtle rounded-xl px-4 py-3 bg-zinc-50 flex items-center gap-2">
+                    <div className="w-3 h-3 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-sm text-text-muted">Fetching branches...</span>
+                  </div>
+                ) : (
+                  <select 
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="w-full border border-border-subtle rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent bg-white transition-all appearance-none cursor-pointer"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.25rem' }}
+                  >
+                    {!branches.some(b => b.name === branch) && branch && (
+                      <option value={branch}>{branch} (default)</option>
+                    )}
+                    {branches.map((b) => (
+                      <option key={b.name} value={b.name}>{b.name}</option>
+                    ))}
+                    {branches.length === 0 && !branch && (
+                      <option value="">No branches found</option>
+                    )}
+                  </select>
+                )}
               </div>
 
               <div>

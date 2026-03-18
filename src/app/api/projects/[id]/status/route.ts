@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     if (!dbProject.doAppId) {
-      return Response.json({ phase: "ERROR", logs: "No DO App ID found for this project." });
+      return Response.json({ phase: "ERROR", logs: "Sandbox not initialized. Try removing and re-linking this project." });
     }
 
     // Call Python FastAPI backend to get status
@@ -50,17 +50,34 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Resolve the best available liveUrl: prefer backend response, fallback to DB
     const resolvedLiveUrl = statusData.liveUrl || dbProject.lastPreviewUrl || null;
     
-    // Persist liveUrl to DB if we got one from the backend and it's new
-    if (resolvedLiveUrl && resolvedLiveUrl !== dbProject.lastPreviewUrl) {
+    // Persist liveUrl and dropletIp to DB when they become available
+    const currentSpec = (dbProject.appSpecRaw as any) || {};
+    const needsUpdate = 
+      (resolvedLiveUrl && resolvedLiveUrl !== dbProject.lastPreviewUrl) ||
+      (statusData.dropletIp && statusData.dropletIp !== currentSpec.dropletIp);
+    
+    if (needsUpdate) {
+      const updatedSpec = { ...currentSpec };
+      if (statusData.dropletIp) updatedSpec.dropletIp = statusData.dropletIp;
+      
       await db.update(project)
-        .set({ lastPreviewUrl: resolvedLiveUrl, updatedAt: new Date() })
+        .set({ 
+          lastPreviewUrl: resolvedLiveUrl || dbProject.lastPreviewUrl,
+          appSpecRaw: updatedSpec,
+          updatedAt: new Date(),
+        })
         .where(eq(project.id, id));
     }
+
+    // Extract repo name from GitHub URL
+    const parts = dbProject.githubUrl.replace("https://github.com/", "").replace(".git", "").split("/");
+    const projectName = parts[parts.length - 1] || "project";
 
     return Response.json({
         phase: statusData.phase,
         logs: statusData.logs,
         liveUrl: resolvedLiveUrl,
+        projectName: projectName,
     });
 
   } catch (err: any) {

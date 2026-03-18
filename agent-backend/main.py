@@ -2,16 +2,29 @@ import os
 import shutil
 import tempfile
 import zipfile
+import uuid
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from typing import Optional
 import git
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Create uploads directory
+UPLOADS_DIR = Path(__file__).parent / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+
 app = FastAPI(title="Agent Brain Backend")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Serve uploaded files statically
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 class SyncRequest(BaseModel):
     repoId: str
@@ -148,136 +161,208 @@ def upload_to_spaces(file_path, object_name):
         print(f"Spaces upload failed: {e}")
         return None
 
-class DOMcpServer:
-    """Mocking the behavior of a genuine MCP Server with App Platform Skills (2026 Zero-Config)"""
-    @staticmethod
-    def create_preview(repo_url: str, branch: str) -> dict:
-        import requests, os
-        token = os.getenv("GRADIENT_ACCESS_TOKEN")
-        
-        repo_path = repo_url.replace("https://github.com/", "").replace(".git", "")
-        app_name = repo_path.split("/")[-1].lower()[:30]
-        
-        url = "https://api.digitalocean.com/v2/apps"
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        
-        # 2026 Zero-Config App Platform Skill
-        # Purely specifying the repo, App Platform Buildpacks auto-detect package.json and Node 24.
-        spec = {
-            "name": app_name,
-            "region": "nyc3",
-            "services": [{
-                "name": f"{app_name}-web",
-                "http_port": 3000,
-                "github": {
-                    "repo": repo_path,
-                    "branch": branch,
-                    "deploy_on_push": True
-                },
-                "instance_size_slug": "basic-xxs",
-                "instance_count": 1
-            }]
-        }
-        
-        print(f"[MCP Client] Sending request to DigitalOcean: deploy {repo_path}")
-        try:
-            resp = requests.post(url, json={"spec": spec}, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            app_info = data.get("app", {})
-            
-            # Use 'live_url' which is the standard field, fallback to None
-            print(app_info.get("live_url"))
-            return {
-                "doAppId": app_info.get("id"),
-                "liveUrl": app_info.get("live_url"), # DO returns this field if assigned
-                "appSpecRaw": app_info.get("spec", spec)
-            }
-        except Exception as e:
-            print(f"Failed to create DO app via MCP: {e}")
-            return {
-                "doAppId": f"mock-{app_name}",
-                "liveUrl": f"https://{app_name}.ondigitalocean.app",
-                "appSpecRaw": spec
-            }
+import secrets
+import cloud_init
 
-do_app_platform = DOMcpServer()
+def create_droplet(name: str, user_data: str) -> dict:
+    """Create a DO Droplet as a live sandbox."""
+    token = os.getenv("GRADIENT_ACCESS_TOKEN")
+    app_name = name.lower().replace(" ", "-")[:30]
+
+    payload = {
+        "name": f"lightly-{app_name}",
+        "region": "sfo3",
+        "size": "s-1vcpu-2gb",  # 2GB — 1GB was causing OOM kills during npm install/dev server
+        "image": "ubuntu-22-04-x64",
+        "user_data": user_data,
+        "tags": ["lightly"],
+    }
+
+    print(f"[Droplet] Creating: lightly-{app_name} in sfo3...")
+    resp = requests.post(
+        "https://api.digitalocean.com/v2/droplets",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json=payload,
+    )
+
+    if not resp.ok:
+        error_detail = resp.text
+        print(f"[Droplet] FAILED ({resp.status_code}): {error_detail}")
+        raise Exception(f"DO API error {resp.status_code}: {error_detail}")
+
+    droplet = resp.json()["droplet"]
+    print(f"[Droplet] Created {droplet['id']} — {droplet['name']}")
+    return {"id": str(droplet["id"]), "name": droplet["name"]}
+
 
 @app.post("/api/projects/sync")
 async def sync_project(req: SyncRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(process_repo_sync, req)
-    app_data = do_app_platform.create_preview(req.githubUrl, "main")
-    
-    live_url = app_data["liveUrl"]
-    if live_url and not live_url.startswith("http"):
-        live_url = f"https://{live_url}"
-        
-    return {
-        "status": "sync_started", 
-        "repoId": req.repoId,
-        "liveUrl": live_url,
-        "doAppId": app_data["doAppId"],
-        "appSpecRaw": app_data["appSpecRaw"]
-    }
+    try:
+        background_tasks.add_task(process_repo_sync, req)
 
-@app.get("/api/projects/{do_app_id}/status")
-async def get_app_status(do_app_id: str):
-    import requests, os
-    token = os.getenv("GRADIENT_ACCESS_TOKEN")
-    
-    if do_app_id.startswith("mock-"):
-        # Mock polling for local demonstration without token
-        import random
-        phases = ["BUILDING", "DEPLOYING", "ACTIVE"]
-        phase = random.choice(["BUILDING", "BUILDING", "ACTIVE"])
+        # Generate a sync token for the file sync API on the Droplet
+        sync_token = secrets.token_urlsafe(24)
+
+        # Build cloud-init and create Droplet
+        user_data = cloud_init.build(req.githubUrl, req.githubToken or "", "main", sync_token)
+        droplet = create_droplet(req.name, user_data)
+
         return {
-            "phase": phase,
-            "logs": "[BUILD] Auto-detecting package.json...\n[BUILD] Installing dependencies (di)\n[BUILD] Optimizing build..."
+            "status": "sync_started",
+            "repoId": req.repoId,
+            "liveUrl": "",
+            "doAppId": droplet["id"],
+            "appSpecRaw": {"syncToken": sync_token, "type": "droplet"},
         }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
+@app.get("/api/projects/{droplet_id}/status")
+async def get_app_status(droplet_id: str):
+    token = os.getenv("GRADIENT_ACCESS_TOKEN")
+
+    if droplet_id.startswith("mock-"):
+        return {"phase": "ACTIVE", "logs": "", "liveUrl": "http://localhost:3000"}
 
     headers = {"Authorization": f"Bearer {token}"}
-    
-    try:
-        # Get active deployment
-        app_resp = requests.get(f"https://api.digitalocean.com/v2/apps/{do_app_id}", headers=headers)
-        app_data = app_resp.json().get("app", {})
-        
-        # 1. Try live_url first, then default_ingress
-        # This is the secret to beat the 'example.com' bug
-        live_url = app_data.get("live_url") or app_data.get("default_ingress")
-        print(live_url)
-        
-        if live_url and not live_url.startswith("http"):
-            live_url = f"https://{live_url}"
-        # 2. Fetch Deployments for the phase/logs
-        dep_resp = requests.get(f"https://api.digitalocean.com/v2/apps/{do_app_id}/deployments", headers=headers)
-        dep_resp = requests.get(f"https://api.digitalocean.com/v2/apps/{do_app_id}/deployments", headers=headers)
-        dep_resp.raise_for_status()
-        deployments = dep_resp.json().get("deployments", [])
-        
-        if not deployments:
-            return {"phase": "PENDING", "logs": "Waiting for deployment to start..."}
-            
-        latest = deployments[0]
-        phase = latest.get("phase", "PENDING")
-        dep_id = latest.get("id")
-        
-        # Get logs
-        logs = ""
-        if dep_id:
-            log_resp = requests.get(f"https://api.digitalocean.com/v2/apps/{do_app_id}/deployments/{dep_id}/logs?type=BUILD", headers=headers)
-            if log_resp.ok:
-                log_data = log_resp.json()
-                logs = log_data.get("historic_urls", []) # Usually DO returns historic URL or live logs socket
-                # We will just return a placeholder or fetch if DO returns raw string (DO sometimes returns pure text or a URL to download)
-                # Actually v2/apps logs endpoint returns a massive object with 'historic_urls'.
-                # For showcase, returning actual status phase and a standard output is cleaner.
-                logs = f"[BUILD] Phase is currently {phase}. Fetching active deployment stream..."
 
-        return {"phase": phase, "logs": logs, "liveUrl": live_url}
+    try:
+        resp = requests.get(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers=headers)
+        if not resp.ok:
+            return {"phase": "ERROR", "logs": f"Droplet API error: {resp.status_code}"}
+
+        droplet = resp.json()["droplet"]
+        status = droplet["status"]
+
+        if status != "active":
+            return {"phase": "BUILDING", "logs": f"Droplet status: {status}. Setting up environment..."}
+
+        # Get public IP
+        ip = None
+        for net in droplet.get("networks", {}).get("v4", []):
+            if net["type"] == "public":
+                ip = net["ip_address"]
+                break
+
+        if not ip:
+            return {"phase": "BUILDING", "logs": "Waiting for IP assignment..."}
+
+        # Check if sync API is healthy (means cloud-init finished)
+        try:
+            health = requests.get(f"http://{ip}:8080/health", timeout=5)
+            if health.ok:
+                return {
+                    "phase": "ACTIVE",
+                    "logs": "",
+                    "liveUrl": f"http://{ip}:3000",
+                    "dropletIp": ip,
+                }
+        except Exception:
+            pass
+
+        return {"phase": "DEPLOYING", "logs": "Installing dependencies and starting dev server..."}
+
     except Exception as e:
         print(f"Status check failed: {e}")
         return {"phase": "ERROR", "logs": str(e)}
+
+@app.delete("/api/droplets/{droplet_id}/destroy")
+async def destroy_droplet(droplet_id: str):
+    token = os.getenv("GRADIENT_ACCESS_TOKEN")
+    try:
+        resp = requests.delete(f"https://api.digitalocean.com/v2/droplets/{droplet_id}",
+            headers={"Authorization": f"Bearer {token}"})
+        print(f"[Droplet] Destroy {droplet_id}: {resp.status_code}")
+        return {"ok": resp.ok}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+# ── Agent Endpoints ─────────────────────────────────────────────────────
+
+from fastapi.responses import StreamingResponse
+from agent import AgentChatRequest, run_agent, ConfirmRequest, confirm_changes, RevertRequest, revert_changes
+
+@app.post("/api/agent/chat")
+async def agent_chat(req: AgentChatRequest):
+    return StreamingResponse(run_agent(req), media_type="text/event-stream")
+
+@app.post("/api/agent/confirm")
+async def agent_confirm(req: ConfirmRequest):
+    try:
+        result = confirm_changes(req)
+        return result
+    except Exception as e:
+        print(f"Confirm error: {e}")
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/agent/revert")
+async def agent_revert(req: RevertRequest):
+    try:
+        result = revert_changes(req)
+        return result
+    except Exception as e:
+        print(f"Revert error: {e}")
+        return {"ok": False, "error": str(e)}
+
+# ── File Upload Endpoint ────────────────────────────────────────────────
+
+ALLOWED_UPLOAD_TYPES = {
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml",
+    "image/bmp", "image/avif",
+    "application/pdf",
+    "text/css", "text/html", "text/plain",
+    "application/json",
+    "application/zip",
+    "image/x-figma",
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+@app.post("/api/uploads")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a design file or image. Returns a URL to reference it."""
+    # Validate content type
+    content_type = file.content_type or "application/octet-stream"
+    # Be permissive — allow any image type
+    if not (content_type.startswith("image/") or content_type in ALLOWED_UPLOAD_TYPES):
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{content_type}' not supported. Upload images, PDFs, or design files."
+        )
+
+    # Read file
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Max 10MB.")
+
+    # Generate unique filename preserving extension
+    ext = Path(file.filename or "file").suffix or ".bin"
+    unique_name = f"{uuid.uuid4().hex[:12]}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+
+    # Write to disk
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    print(f"[Upload] Saved {file.filename} -> {unique_name} ({len(contents)} bytes)")
+
+    return {
+        "url": f"/uploads/{unique_name}",
+        "filename": unique_name,
+        "originalName": file.filename,
+        "size": len(contents),
+        "contentType": content_type,
+    }
+
+@app.get("/api/uploads/{filename}")
+async def get_upload(filename: str):
+    """Retrieve an uploaded file."""
+    file_path = UPLOADS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
 if __name__ == "__main__":
     import uvicorn

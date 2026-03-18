@@ -14,17 +14,11 @@ export const auth = betterAuth({
             verification: schema.verification,
         }
     }),
-    emailAndPassword: {
-        enabled: true,
-    },
     socialProviders: {
         github: {
             clientId: process.env.GITHUB_CLIENT_ID || "",
             clientSecret: process.env.GITHUB_CLIENT_SECRET || "",
-        },
-        google: {
-            clientId: process.env.GOOGLE_CLIENT_ID || "",
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+            scope: ["repo", "read:user", "user:email"],
         },
     },
     plugins: [username()],
