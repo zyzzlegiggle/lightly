@@ -2,10 +2,6 @@
 
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button"; // I'll create this or use a basic button
-import { Input } from "@/components/ui/input";   // I'll create this or use a basic input
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Github, Chrome, Mail, Loader2 } from "lucide-react";
 
 export default function AuthPage() {

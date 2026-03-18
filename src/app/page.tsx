@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { SetupModal } from "./SetupModal";
 
 export default async function Home() {
   const session = await auth.api.getSession({
@@ -13,29 +14,30 @@ export default async function Home() {
 
   return (
     <div className="flex h-screen w-full bg-background font-sans">
+      <SetupModal session={session} />
       {/* Sidebar */}
       <aside className="w-64 flex flex-col border-r border-border-subtle bg-sidebar-bg">
-        <nav className="flex-1 px-4 pt-8">
+        <nav className="flex-1 px-4 pt-8 pb-4 flex flex-col">
+          {/* User Profile */}
+          <div className="flex items-center gap-3 p-2 mb-6 cursor-pointer hover:bg-black/[0.03] rounded-lg transition-colors">
+            {session.user.image ? (
+              <img src={session.user.image} alt="User Avatar" className="w-8 h-8 rounded-full" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-xs">
+                {session.user.name?.[0] || "?"}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{session.user.name}</p>
+              {session.user.username && <p className="text-xs text-zinc-500 truncate">@{session.user.username}</p>}
+            </div>
+          </div>
+
           <div className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-2">Workspace</div>
           <div className="space-y-1">
             <div className="flex items-center gap-3 p-2 rounded-lg bg-black/[0.03] font-medium cursor-pointer">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
               Home
-            </div>
-            {/* User Profile / Logout */}
-            <div className="mt-auto border-t border-border-subtle pt-4 px-2">
-              <div className="flex items-center gap-3 p-2">
-                 {session.user.image ? (
-                    <img src={session.user.image} alt="User Avatar" className="w-8 h-8 rounded-full" />
-                 ) : (
-                    <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-xs">
-                        {session.user.name[0]}
-                    </div>
-                 )}
-                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{session.user.name}</p>
-                 </div>
-              </div>
             </div>
           </div>
         </nav>

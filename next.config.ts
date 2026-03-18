@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ["@better-auth/core"],
+  serverExternalPackages: ["better-auth"],
 };
 
 export default nextConfig;
