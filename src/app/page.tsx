@@ -1,63 +1,67 @@
-import Image from "next/image";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    redirect("/auth");
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+    <div className="flex h-screen w-full bg-background font-sans">
+      {/* Sidebar */}
+      <aside className="w-64 flex flex-col border-r border-border-subtle bg-sidebar-bg">
+        <nav className="flex-1 px-4 pt-8">
+          <div className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-2">Workspace</div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-3 p-2 rounded-lg bg-black/[0.03] font-medium cursor-pointer">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+              Home
+            </div>
+            {/* User Profile / Logout */}
+            <div className="mt-auto border-t border-border-subtle pt-4 px-2">
+              <div className="flex items-center gap-3 p-2">
+                 {session.user.image ? (
+                    <img src={session.user.image} alt="User Avatar" className="w-8 h-8 rounded-full" />
+                 ) : (
+                    <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-xs">
+                        {session.user.name[0]}
+                    </div>
+                 )}
+                 <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{session.user.name}</p>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-8 bg-zinc-50/50">
+        <div className="max-w-4xl w-full text-center space-y-12">
+          {/* Hero Section */}
+          <div className="space-y-4">
+            <h1 className="text-5xl font-serif text-foreground tracking-tight italic">
+              Another day for building, <span className="text-accent-primary not-italic font-sans font-bold">{session.user.name.split(" ")[0]}?</span>
+            </h1>
+
+            <div className="flex items-center justify-center gap-2 text-xl font-bold text-foreground">
+              Your projects <span className="text-text-muted font-normal">(0/1)</span>
+            </div>
+          </div>
+
+          {/* Project Grid / Empty State */}
+          <div className="flex justify-center">
+            <div className="w-[320px] h-[180px] bg-white rounded-2xl border border-border-subtle shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col items-center justify-center p-8 text-center space-y-2 group">
+              <h3 className="font-bold text-lg">Create Project</h3>
+              <p className="text-text-muted text-sm">Connect a repository to get started</p>
+            </div>
+          </div>
         </div>
       </main>
     </div>
