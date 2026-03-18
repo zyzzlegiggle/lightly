@@ -1,0 +1,41 @@
+{
+  "insertResult": {
+    "id": "7c4663a8-4471-4bf1-bd3f-1d9720da95b3",
+    "repoId": "1137688871",
+    "githubUrl": "https://github.com/zyzzlegiggle/tenunku.git",
+    "gradientKbId": "kb-mock-1773839578485",
+    "userId": "r3s71XkwxLha8ygaDipoYxqhXpmxr63y",
+    "createdAt": "2026-03-18T05:20:57.511Z",
+    "updatedAt": "2026-03-18T05:20:57.511Z"
+  },
+  "columns": [
+    {
+      "column_name": "createdAt",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "column_name": "updatedAt",
+      "data_type": "timestamp without time zone"
+    },
+    {
+      "column_name": "githubUrl",
+      "data_type": "text"
+    },
+    {
+      "column_name": "id",
+      "data_type": "text"
+    },
+    {
+      "column_name": "userId",
+      "data_type": "text"
+    },
+    {
+      "column_name": "gradientKbId",
+      "data_type": "text"
+    },
+    {
+      "column_name": "repoId",
+      "data_type": "text"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
 	id: text("id").primaryKey(),
@@ -59,6 +59,10 @@ export const project = pgTable("project", {
 	userId: text("userId")
 		.notNull()
 		.references(() => user.id),
+	doAppId: text("doAppId"),
+	activeBranch: text("activeBranch").default("main"),
+	lastPreviewUrl: text("lastPreviewUrl"),
+	appSpecRaw: jsonb("appSpecRaw"),
 	createdAt: timestamp("createdAt").notNull().defaultNow(),
 	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
