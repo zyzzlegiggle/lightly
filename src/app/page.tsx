@@ -1,17 +1,14 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { auth0 } from "@/lib/auth0";
 import { redirect } from "next/navigation";
 import { SetupModal } from "./SetupModal";
 import { Sidebar } from "./Sidebar";
 import HomePageClient from "./HomePageClient";
 
 export default async function Home() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const session = await auth0.getSession();
 
   if (!session) {
-    redirect("/auth");
+    redirect("/auth/login");
   }
 
   return (

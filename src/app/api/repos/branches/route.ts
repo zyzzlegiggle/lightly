@@ -1,15 +1,9 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
-import { db } from "@/lib/db";
-import { account } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { getAuthContext } from "@/lib/auth-context";
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({
-    headers: await headers()
-  });
+  const ctx = await getAuthContext();
 
-  if (!session?.user) {
+  if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -20,28 +14,13 @@ export async function GET(request: Request) {
     return Response.json({ error: "Missing fullName parameter" }, { status: 400 });
   }
 
-  // Find github account for this user
-  const userAccounts = await db
-    .select()
-    .from(account)
-    .where(and(eq(account.userId, session.user.id), eq(account.providerId, "github")));
+  const { githubToken } = ctx;
 
-  if (!userAccounts || userAccounts.length === 0) {
-    return Response.json({ error: "No GitHub account linked" }, { status: 404 });
-  }
-
-  const githubAccount = userAccounts[0];
-  const accessToken = githubAccount.accessToken;
-
-  if (!accessToken) {
-    return Response.json({ error: "GitHub access token missing" }, { status: 404 });
-  }
-
-  // Fetch branches from GitHub
+  // Fetch branches from GitHub using token from Token Vault
   try {
     const res = await fetch(`https://api.github.com/repos/${fullName}/branches?per_page=100`, {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${githubToken}`,
         Accept: "application/vnd.github.v3+json",
       },
       next: { revalidate: 0 } // no cache

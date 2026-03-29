@@ -15,7 +15,7 @@ AI-powered design tool that lets designers edit live web apps through natural la
 | Layer | Tech |
 |-------|------|
 | Frontend | Next.js 16, React 19, Tailwind CSS 4 |
-| Auth | Better Auth (GitHub OAuth) |
+| Auth | Auth0 (GitHub OAuth + Token Vault) |
 | Database | PostgreSQL (DigitalOcean Managed) + Drizzle ORM |
 | AI Agent | Python FastAPI, DigitalOcean GenAI (LLM) |
 | Sandboxes | DigitalOcean Droplets + cloud-init |
@@ -45,8 +45,9 @@ python main.py          # → http://localhost:8000
 
 **Frontend (`.env`)**
 - `DATABASE_URL` — PostgreSQL connection string
-- `BETTER_AUTH_SECRET` — Auth secret key
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub OAuth app
+- `AUTH0_DOMAIN` / `AUTH0_CLIENT_ID` / `AUTH0_CLIENT_SECRET` — Auth0 app credentials
+- `AUTH0_SECRET` — Session encryption key
+- `APP_BASE_URL` — App URL (http://localhost:3000)
 
 **Backend (`agent-backend/.env`)**
 - `GRADIENT_ACCESS_TOKEN` — DigitalOcean API token
@@ -57,17 +58,20 @@ python main.py          # → http://localhost:8000
 
 ```
 Browser ──→ Next.js ──→ FastAPI Agent ──→ GitHub API (read/write files)
-                │              │
-                │              ├──→ DigitalOcean API (create/destroy Droplets)
-                │              └──→ DO GenAI (LLM inference)
+                │              │                    ↑
+                │              ├──→ DO API (Droplets)│
+                │              └──→ DO GenAI (LLM)   │
+                │                                    │
+                ├──→ Auth0 ──→ Token Vault ──→ GitHub token (short-lived)
                 │
                 └──→ iframe ──→ Droplet :3000 (live preview)
                                 Droplet :8080 (file sync API)
 ```
 
-## Built With DigitalOcean
+## Built With
 
-- **Droplets** — Live sandbox environments with cloud-init provisioning
-- **Managed PostgreSQL** — User data, projects, auth sessions
-- **Spaces** — Source code storage for knowledge base indexing
-- **GenAI Platform** — LLM inference for the AI agent
+- **Auth0** — User authentication + Token Vault for secure GitHub token management
+- **DigitalOcean Droplets** — Live sandbox environments with cloud-init provisioning
+- **DigitalOcean Managed PostgreSQL** — User data, projects
+- **DigitalOcean Spaces** — Source code storage for knowledge base indexing
+- **DigitalOcean GenAI Platform** — LLM inference for the AI agent

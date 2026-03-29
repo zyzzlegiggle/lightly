@@ -95,13 +95,36 @@ node /app/_sync.cjs &
 
 # Detect framework and start dev server on port 3000
 cd /app
-if grep -q '"next"' package.json 2>/dev/null; then
-  npx next dev -H 0.0.0.0 -p 3000 &
-elif grep -q '"vite"' package.json 2>/dev/null; then
-  npx vite --host 0.0.0.0 --port 3000 &
-else
-  PORT=3000 HOST=0.0.0.0 npm run dev &
+export NODE_OPTIONS="--max-old-space-size=1024"
+
+# Make sure npm install actually completed
+if [ ! -d node_modules ] && [ -f package.json ]; then
+  npm install --prefer-offline 2>&1 || true
 fi
+
+start_dev() {
+  if grep -q '"next"' package.json 2>/dev/null; then
+    npx next dev -H 0.0.0.0 -p 3000
+  elif grep -q '"vite"' package.json 2>/dev/null; then
+    npx vite --host 0.0.0.0 --port 3000
+  else
+    PORT=3000 HOST=0.0.0.0 npm run dev
+  fi
+}
+
+# Retry dev server up to 3 times (it can crash on first compile due to memory)
+for attempt in 1 2 3; do
+  echo "[Dev] Starting dev server (attempt $attempt)..."
+  start_dev &
+  DEV_PID=$!
+  sleep 15
+  if kill -0 $DEV_PID 2>/dev/null; then
+    echo "[Dev] Server running on :3000"
+    break
+  fi
+  echo "[Dev] Server died, retrying..."
+  sleep 3
+done
 
 wait
 """

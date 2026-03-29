@@ -1,36 +1,19 @@
-import { createAuthClient } from "better-auth/client";
-import { NextResponse, type NextRequest } from "next/server";
-
-const authClient = createAuthClient({
-	baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-});
+import type { NextRequest } from "next/server";
+import { auth0 } from "./lib/auth0";
 
 export async function middleware(request: NextRequest) {
-	console.log(`[Middleware] Path: ${request.nextUrl.pathname}`);
-	
-    // Log all cookies to see what better-auth is doing
-    const allCookies = request.cookies.getAll().map(c => c.name);
-    console.log(`[Middleware] Cookies present: ${allCookies.join(", ") || "none"}`);
-
-	const sessionToken = request.cookies.get("better-auth.session_token");
-	const session = !!sessionToken;
-
-	if (!session) {
-		if (request.nextUrl.pathname === "/") {
-			console.log(`[Middleware] Redirecting to /auth`);
-			return NextResponse.redirect(new URL("/auth", request.url));
-		}
-	}
-
-	if (session && request.nextUrl.pathname === "/auth") {
-		console.log(`[Middleware] Redirecting to /`);
-		return NextResponse.redirect(new URL("/", request.url));
-	}
-
-	console.log(`[Middleware] Next`);
-	return NextResponse.next();
+  return await auth0.middleware(request);
 }
 
 export const config = {
-	matcher: ["/", "/auth"],
+  matcher: [
+    /*
+     * Match all request paths except for:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico, sitemap.xml, robots.txt (metadata files)
+     * - public assets (logo, images)
+     */
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|logo.png|.*\\.svg).*)",
+  ],
 };

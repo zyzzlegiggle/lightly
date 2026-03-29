@@ -1,40 +1,30 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { auth0 } from "@/lib/auth0";
+import { getAuthContext } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { project } from "@/lib/schema";
-import { account } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await auth0.getSession();
   if (!session?.user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.user.sub;
   const projects = await db.query.project.findMany({
-    where: eq(project.userId, session.user.id),
+    where: eq(project.userId, userId),
     orderBy: (p, { desc }) => [desc(p.createdAt)],
   });
   return Response.json({ projects });
 }
 
 export async function POST(req: Request) {
-  const session = await auth.api.getSession({
-    headers: await headers()
-  });
+  const ctx = await getAuthContext();
 
-  if (!session?.user) {
+  if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. FETCH THE GITHUB TOKEN FROM THE DATABASE
-  const userAccount = await db.query.account.findFirst({
-    where: and(
-      eq(account.userId, session.user.id),
-      eq(account.providerId, "github")
-    ),
-  });
-
-  const githubToken = userAccount?.accessToken; // This is the missing key
+  const { userId, githubToken } = ctx;
 
   try {
     const { repoId, githubUrl, name } = await req.json();
@@ -45,7 +35,7 @@ export async function POST(req: Request) {
 
     // ── Guard: same repo can't be linked twice ──
     const dupeRepo = await db.query.project.findFirst({
-      where: and(eq(project.repoId, repoId), eq(project.userId, session.user.id)),
+      where: and(eq(project.repoId, repoId), eq(project.userId, userId)),
     });
 
     if (dupeRepo) {
@@ -55,7 +45,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Call Python FastAPI backend to start indexing into DigitalOcean Knowledge Base
+    // Call Python FastAPI backend to start indexing
+    // GitHub token now comes from Token Vault (short-lived, secure)
     const pyResp = await fetch("http://localhost:8000/api/projects/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -94,7 +85,7 @@ export async function POST(req: Request) {
       repoId,
       githubUrl,
       gradientKbId,
-      userId: session.user.id,
+      userId,
       doAppId,
       lastPreviewUrl: liveUrl,
       appSpecRaw,

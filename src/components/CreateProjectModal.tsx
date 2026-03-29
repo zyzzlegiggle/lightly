@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { authClient } from "@/lib/auth-client";
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -53,14 +52,10 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
     }
   };
 
-  const linkGithub = async () => {
-    setIsLinking(true);
-    try {
-      await authClient.linkSocial({ provider: "github", callbackURL: window.location.href });
-    } catch (err) {
-      console.error("Failed to link GitHub", err);
-      setIsLinking(false);
-    }
+  const linkGithub = () => {
+    // Redirect to Auth0 login with GitHub connection
+    // Auth0 will handle the OAuth flow and store the token in Token Vault
+    window.location.href = "/auth/login?connection=github&returnTo=" + encodeURIComponent(window.location.href);
   };
   
   const handleSelectRepo = async (repo: any) => {

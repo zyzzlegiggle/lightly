@@ -1,22 +1,21 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { auth0 } from "@/lib/auth0";
 import { db } from "@/lib/db";
 import { project } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
-import { NextResponse } from "next/server";
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await auth0.getSession();
   if (!session?.user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
+  const userId = session.user.sub;
 
   // Only delete if it belongs to the user
   const deleted = await db
     .delete(project)
-    .where(and(eq(project.id, id), eq(project.userId, session.user.id)))
+    .where(and(eq(project.id, id), eq(project.userId, userId)))
     .returning();
 
   if (deleted.length === 0) {

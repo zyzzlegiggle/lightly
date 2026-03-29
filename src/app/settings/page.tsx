@@ -1,16 +1,13 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { auth0 } from "@/lib/auth0";
 import { Sidebar } from "../Sidebar";
 import SettingsPageClient from "./SettingsPageClient";
 
 export default async function SettingsPage() {
-  const session = await auth.api.getSession({
-    headers: await headers()
-  });
+  const session = await auth0.getSession();
 
   if (!session) {
-    redirect("/auth");
+    redirect("/auth/login");
   }
 
   return (

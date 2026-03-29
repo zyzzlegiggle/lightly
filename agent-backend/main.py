@@ -253,17 +253,23 @@ async def get_app_status(droplet_id: str):
         # Check if sync API is healthy (means cloud-init finished)
         try:
             health = requests.get(f"http://{ip}:8080/health", timeout=5)
-            if health.ok:
-                return {
-                    "phase": "ACTIVE",
-                    "logs": "",
-                    "liveUrl": f"http://{ip}:3000",
-                    "dropletIp": ip,
-                }
+            if not health.ok:
+                return {"phase": "DEPLOYING", "logs": "Installing dependencies and starting dev server..."}
         except Exception:
-            pass
+            return {"phase": "DEPLOYING", "logs": "Installing dependencies and starting dev server..."}
 
-        return {"phase": "DEPLOYING", "logs": "Installing dependencies and starting dev server..."}
+        # Check if dev server on :3000 is actually responding
+        try:
+            requests.get(f"http://{ip}:3000", timeout=5)
+        except Exception:
+            return {"phase": "DEPLOYING", "logs": "Dev server is compiling... almost ready.", "dropletIp": ip}
+
+        return {
+            "phase": "ACTIVE",
+            "logs": "",
+            "liveUrl": f"http://{ip}:3000",
+            "dropletIp": ip,
+        }
 
     except Exception as e:
         print(f"Status check failed: {e}")

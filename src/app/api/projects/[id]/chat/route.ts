@@ -1,12 +1,12 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { auth0 } from "@/lib/auth0";
+import { getAuthContext } from "@/lib/auth-context";
 import { db } from "@/lib/db";
-import { project, account } from "@/lib/schema";
+import { project } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
+  const ctx = await getAuthContext();
+  if (!ctx) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -14,21 +14,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // Get project
   const dbProject = await db.query.project.findFirst({
-    where: and(eq(project.id, id), eq(project.userId, session.user.id)),
+    where: and(eq(project.id, id), eq(project.userId, ctx.userId)),
   });
   if (!dbProject) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Get GitHub token
-  const userAccount = await db.query.account.findFirst({
-    where: and(eq(account.userId, session.user.id), eq(account.providerId, "github")),
-  });
-
   const { message, history = [], currentPage = "/", attachments = [] } = await req.json();
   const spec = dbProject.appSpecRaw as any;
 
-  // Forward to FastAPI agent
+  // Forward to FastAPI agent — GitHub token from Token Vault (short-lived, secure)
   const pyResp = await fetch("http://localhost:8000/api/agent/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       message,
       history,
       githubUrl: dbProject.githubUrl,
-      githubToken: userAccount?.accessToken || "",
+      githubToken: ctx.githubToken,
       doAppId: dbProject.doAppId,
       branch: dbProject.activeBranch || "main",
       repoId: dbProject.repoId,
