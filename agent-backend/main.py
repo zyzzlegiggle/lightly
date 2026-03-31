@@ -26,11 +26,21 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # Serve uploaded files statically
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
+class EnvVar(BaseModel):
+    key: str
+    value: str
+
 class SyncRequest(BaseModel):
     repoId: str
     githubUrl: str
     name: str
-    githubToken: str # <--- Add this
+    githubToken: str
+    envVars: list[EnvVar] = []
+
+class ManualSyncRequest(BaseModel):
+    dropletIp: str
+    syncToken: str
+    changes: list[dict] # [{"file": "path", "content": "..."}]
 
 def create_knowledge_base(repo_name: str) -> str:
     """Create a new Knowledge Base in DigitalOcean Gradient"""
@@ -165,15 +175,28 @@ import secrets
 import cloud_init
 
 def create_droplet(name: str, user_data: str) -> dict:
-    """Create a DO Droplet as a live sandbox."""
+    """Create a DO Droplet as a live sandbox.
+
+    Uses a pre-baked snapshot (DROPLET_SNAPSHOT_ID) if available — this skips
+    apt-get + Node.js install (~90s saved). Falls back to stock Ubuntu if unset.
+    """
     token = os.getenv("GRADIENT_ACCESS_TOKEN")
     app_name = name.lower().replace(" ", "-")[:30]
+
+    # Use pre-baked snapshot if available (Option A), else fall back to ubuntu
+    snapshot_id = os.getenv("DROPLET_SNAPSHOT_ID")
+    if snapshot_id:
+        image = snapshot_id
+        print(f"[Droplet] Using pre-baked snapshot {snapshot_id} ✓")
+    else:
+        image = "ubuntu-22-04-x64"
+        print("[Droplet] No DROPLET_SNAPSHOT_ID set — using stock Ubuntu (slower cold start)")
 
     payload = {
         "name": f"lightly-{app_name}",
         "region": "sfo3",
-        "size": "s-1vcpu-2gb",  # 2GB — 1GB was causing OOM kills during npm install/dev server
-        "image": "ubuntu-22-04-x64",
+        "size": "s-1vcpu-2gb",
+        "image": image,
         "user_data": user_data,
         "tags": ["lightly"],
     }
@@ -203,8 +226,9 @@ async def sync_project(req: SyncRequest, background_tasks: BackgroundTasks):
         # Generate a sync token for the file sync API on the Droplet
         sync_token = secrets.token_urlsafe(24)
 
-        # Build cloud-init and create Droplet
-        user_data = cloud_init.build(req.githubUrl, req.githubToken or "", "main", sync_token)
+        # Build cloud-init and create Droplet (with user env vars)
+        env_dict = {ev.key: ev.value for ev in req.envVars if ev.key.strip()}
+        user_data = cloud_init.build(req.githubUrl, req.githubToken or "", "main", sync_token, env_dict)
         droplet = create_droplet(req.name, user_data)
 
         return {
@@ -230,14 +254,19 @@ async def get_app_status(droplet_id: str):
     headers = {"Authorization": f"Bearer {token}"}
 
     try:
-        resp = requests.get(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers=headers)
+        print(f"[Status] Checking droplet {droplet_id}...")
+
+        resp = requests.get(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers=headers, timeout=10)
         if not resp.ok:
+            print(f"[Status] ✗ DO API returned {resp.status_code}: {resp.text[:200]}")
             return {"phase": "ERROR", "logs": f"Droplet API error: {resp.status_code}"}
 
         droplet = resp.json()["droplet"]
         status = droplet["status"]
+        print(f"[Status] Droplet status: {status}")
 
         if status != "active":
+            print(f"[Status] → BUILDING (droplet not active yet)")
             return {"phase": "BUILDING", "logs": f"Droplet status: {status}. Setting up environment..."}
 
         # Get public IP
@@ -248,22 +277,51 @@ async def get_app_status(droplet_id: str):
                 break
 
         if not ip:
+            print(f"[Status] → BUILDING (no public IP yet)")
             return {"phase": "BUILDING", "logs": "Waiting for IP assignment..."}
 
-        # Check if sync API is healthy (means cloud-init finished)
+        print(f"[Status] Droplet IP: {ip}")
+
+        # Check if sync API is healthy (means cloud-init finished dep install)
         try:
-            health = requests.get(f"http://{ip}:8080/health", timeout=5)
+            health = requests.get(f"http://{ip}:8080/health", timeout=3)
+            print(f"[Status] :8080 health → {health.status_code} {health.text[:50]}")
             if not health.ok:
-                return {"phase": "DEPLOYING", "logs": "Installing dependencies and starting dev server..."}
-        except Exception:
-            return {"phase": "DEPLOYING", "logs": "Installing dependencies and starting dev server..."}
+                print(f"[Status] → DEPLOYING (sync API unhealthy)")
+                return {"phase": "DEPLOYING", "logs": "Installing dependencies..."}
+        except Exception as e:
+            print(f"[Status] → DEPLOYING (:8080 unreachable: {e})")
+            return {"phase": "DEPLOYING", "logs": "Installing dependencies..."}
 
-        # Check if dev server on :3000 is actually responding
+        # Check if dev server on :3000 is responding
         try:
-            requests.get(f"http://{ip}:3000", timeout=5)
-        except Exception:
-            return {"phase": "DEPLOYING", "logs": "Dev server is compiling... almost ready.", "dropletIp": ip}
+            dev_resp = requests.get(f"http://{ip}:3000", timeout=3)
+            print(f"[Status] :3000 dev server → {dev_resp.status_code} ({len(dev_resp.text)} bytes)")
+        except Exception as e:
+            print(f"[Status] → DEPLOYING (:3000 unreachable: {type(e).__name__})")
+            # Fetch remote logs to understand WHY :3000 isn't up
+            remote_logs = ""
+            try:
+                log_resp = requests.get(f"http://{ip}:8080/logs", timeout=3)
+                if log_resp.ok:
+                    log_data = log_resp.json()
+                    remote_logs = log_data.get("logs", "")
+                    print(f"[Status] Remote setup logs (last 500 chars):\n{remote_logs[-500:]}")
+                    print(f"[Status] Processes: {log_data.get('processes', 'N/A')}")
+                    print(f"[Status] Port listeners: {log_data.get('ports', 'N/A')}")
+            except Exception:
+                pass
+            # Use the last meaningful line from remote logs for user-facing message
+            user_msg = "Dev server is compiling... almost ready."
+            if remote_logs:
+                lines = [l.strip() for l in remote_logs.strip().splitlines() if l.strip()]
+                if lines:
+                    last = lines[-1]
+                    if "FATAL" in last or "Error" in last or "failed" in last.lower():
+                        user_msg = f"Setup issue: {last[:120]}"
+            return {"phase": "DEPLOYING", "logs": user_msg, "dropletIp": ip}
 
+        print(f"[Status] ✓ ACTIVE — http://{ip}:3000")
         return {
             "phase": "ACTIVE",
             "logs": "",
@@ -272,7 +330,7 @@ async def get_app_status(droplet_id: str):
         }
 
     except Exception as e:
-        print(f"Status check failed: {e}")
+        print(f"[Status] ✗ Exception: {e}")
         return {"phase": "ERROR", "logs": str(e)}
 
 @app.delete("/api/droplets/{droplet_id}/destroy")
@@ -284,6 +342,25 @@ async def destroy_droplet(droplet_id: str):
         print(f"[Droplet] Destroy {droplet_id}: {resp.status_code}")
         return {"ok": resp.ok}
     except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/api/droplets/{droplet_id}/sync")
+async def sync_to_droplet(droplet_id: str, req: ManualSyncRequest):
+    """Proxy sync request directly to a specified Droplet's sync API."""
+    try:
+        resp = requests.post(
+            f"http://{req.dropletIp}:8080/sync",
+            headers={"Authorization": f"Bearer {req.syncToken}", "Content-Type": "application/json"},
+            json={"changes": req.changes},
+            timeout=15
+        )
+        if not resp.ok:
+            return {"ok": False, "status": resp.status_code, "error": resp.text}
+            
+        print(f"[Droplet] Synced {len(req.changes)} files to {req.dropletIp}")
+        return {"ok": True}
+    except Exception as e:
+        print(f"[Droplet] Sync failed to {req.dropletIp}: {e}")
         return {"ok": False, "error": str(e)}
 
 # ── Agent Endpoints ─────────────────────────────────────────────────────

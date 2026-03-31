@@ -180,26 +180,61 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
               ) : (
                 <div className="space-y-4 pr-2">
                   <div className="grid gap-3">
-                    {repos.length === 0 ? (
+                  {repos.length === 0 ? (
                       <div className="p-12 text-sm text-zinc-500 text-center border-2 border-dashed border-zinc-100 rounded-2xl">
                         No push-enabled repositories found.
                       </div>
                     ) : (
                       repos.map((repo) => (
-                        <div key={repo.id} className="p-5 flex items-center justify-between border border-border-subtle rounded-2xl hover:bg-zinc-50/50 transition-colors group">
+                        <div
+                          key={repo.id}
+                          className={`p-5 flex items-center justify-between border rounded-2xl transition-colors group ${
+                            repo.supported !== false
+                              ? "border-border-subtle hover:bg-zinc-50/50"
+                              : "border-zinc-100 bg-zinc-50/30 opacity-60"
+                          }`}
+                        >
                           <div className="flex-1 min-w-0 pr-4">
-                            <p className="font-bold text-base text-text-primary group-hover:text-accent-primary transition-colors">{repo.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className={`font-bold text-base transition-colors ${
+                                repo.supported !== false
+                                  ? "text-text-primary group-hover:text-accent-primary"
+                                  : "text-zinc-400"
+                              }`}>{repo.name}</p>
+                              {/* Framework badge */}
+                              {repo.frameworkLabel && (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                  repo.supported !== false
+                                    ? repo.framework === "next"
+                                      ? "bg-black text-white"
+                                      : repo.framework === "vite"
+                                      ? "bg-violet-100 text-violet-700"
+                                      : repo.framework === "react-scripts"
+                                      ? "bg-sky-100 text-sky-700"
+                                      : "bg-emerald-100 text-emerald-700"
+                                    : "bg-zinc-100 text-zinc-400"
+                                }`}>
+                                  {repo.frameworkLabel}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-text-muted mt-1 truncate">{repo.full_name}</p>
                             {repo.description && (
                               <p className="text-xs text-zinc-500 mt-2 line-clamp-1">{repo.description}</p>
                             )}
                           </div>
-                          <button 
-                            onClick={() => handleSelectRepo(repo)}
-                            className="bg-white border border-border-subtle hover:border-accent-primary hover:text-accent-primary text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-sm active:scale-95"
-                          >
-                            Select
-                          </button>
+                          {repo.supported !== false ? (
+                            <button 
+                              onClick={() => handleSelectRepo(repo)}
+                              className="bg-white border border-border-subtle hover:border-accent-primary hover:text-accent-primary text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-sm active:scale-95"
+                            >
+                              Select
+                            </button>
+                          ) : (
+                            <span className="text-xs font-medium text-zinc-400 px-3 py-1.5 border border-zinc-200 rounded-xl bg-zinc-50">
+                              Unsupported
+                            </span>
+                          )}
                         </div>
                       ))
                     )}

@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   const { userId, githubToken } = ctx;
 
   try {
-    const { repoId, githubUrl, name } = await req.json();
+    const { repoId, githubUrl, name, envVars } = await req.json();
 
     if (!repoId || !githubUrl) {
       return Response.json({ error: "Missing required fields" }, { status: 400 });
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     const pyResp = await fetch("http://localhost:8000/api/projects/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repoId, githubUrl, name, githubToken }),
+      body: JSON.stringify({ repoId, githubUrl, name, githubToken, envVars: envVars || [] }),
     });
 
     let liveUrl = "";

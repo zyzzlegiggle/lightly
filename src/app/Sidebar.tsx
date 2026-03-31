@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { ProjectSettingsModal } from "@/components/ProjectSettingsModal";
 
 interface Project {
   id: string;
@@ -10,12 +11,15 @@ interface Project {
   githubUrl: string;
   lastPreviewUrl: string | null;
   createdAt: string;
+  doAppId?: string | null;
+  appSpecRaw?: any;
 }
 
 export function Sidebar({ session, onNewProject }: { session: any; onNewProject?: () => void }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingsProject, setSettingsProject] = useState<Project | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -53,6 +57,12 @@ export function Sidebar({ session, onNewProject }: { session: any; onNewProject?
     }
   };
 
+  const openSettings = (e: React.MouseEvent, proj: Project) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSettingsProject(proj);
+  };
+
   // Extract repo name from GitHub URL
   const repoName = (url: string) => {
     const parts = url.replace("https://github.com/", "").replace(".git", "").split("/");
@@ -65,6 +75,14 @@ export function Sidebar({ session, onNewProject }: { session: any; onNewProject?
         isCollapsed ? "w-16" : "w-64"
       }`}
     >
+      {/* Settings Modal */}
+      <ProjectSettingsModal 
+        isOpen={!!settingsProject} 
+        onClose={() => setSettingsProject(null)} 
+        project={settingsProject} 
+        onUpdated={fetchProjects}
+      />
+
       <div className={`flex items-center p-3 border-b border-border-subtle bg-sidebar-bg/50 backdrop-blur-md sticky top-0 z-10 ${isCollapsed ? "flex-col gap-4 py-4 justify-center" : "justify-between"}`}>
         {isCollapsed ? (
           <Link href="/" className="w-10 h-10 border border-border-subtle rounded-xl flex items-center justify-center shadow-sm hover:scale-110 hover:shadow-md transition-all active:scale-95">
@@ -160,19 +178,26 @@ export function Sidebar({ session, onNewProject }: { session: any; onNewProject?
                         {name[0]?.toUpperCase()}
                       </div>
                       <span className="flex-1 truncate text-[13px]">{name}</span>
-                      <button
-                        onClick={(e) => deleteProject(proj.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 hover:text-red-500 text-zinc-400 transition-all shrink-0"
-                        title="Remove project"
-                      >
-                        {deletingId === proj.id ? (
-                          <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-                        ) : (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => openSettings(e, proj)}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-all shrink-0"
+                          title="Settings"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        </button>
+                        <button
+                          onClick={(e) => deleteProject(proj.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 hover:text-red-500 text-zinc-400 transition-all shrink-0"
+                          title="Remove project"
+                        >
+                          {deletingId === proj.id ? (
+                            <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          )}
+                        </button>
+                      </div>
                     </Link>
                   );
                 })}

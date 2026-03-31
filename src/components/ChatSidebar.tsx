@@ -357,14 +357,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
 
       {/* ── Header ── */}
       <div className="h-12 border-b border-zinc-100 flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
-            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <span className="text-sm font-semibold text-zinc-800">Design Assistant</span>
-        </div>
+
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
             <button onClick={clearChat} className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all" title="Clear chat">
@@ -393,7 +386,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
             </div>
             <h3 className="font-semibold text-zinc-800 text-[15px] mb-1">What would you like to change?</h3>
             <p className="text-xs text-zinc-500 leading-relaxed max-w-[240px]">
-              Describe what you want to build or modify. Upload mockups or screenshots as reference.
+              Describe what you want to build or modify.
             </p>
             <div className="mt-5 flex flex-wrap gap-1.5 justify-center">
               {["Upload a mockup", "Change the design", "Rework the UI"].map((s) => (
