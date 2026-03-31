@@ -306,12 +306,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
     }
   };
 
-  // ── Clear chat ──
 
-  const clearChat = () => {
-    setMessages([]);
-    localStorage.removeItem(STORAGE_KEY(projectId));
-  };
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -337,35 +332,29 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
 
   return (
     <div
-      className={`w-[380px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0 relative transition-all ${isDragOver ? "ring-2 ring-violet-400 ring-inset" : ""}`}
+      className={`w-[380px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0 relative transition-all ${isDragOver ? "ring-2 ring-zinc-400 ring-inset" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* ── Drag overlay ── */}
       {isDragOver && (
-        <div className="absolute inset-0 z-50 bg-violet-50/90 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none rounded-r-xl">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4 shadow-lg animate-bounce">
+        <div className="absolute inset-0 z-50 bg-zinc-50/90 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none rounded-r-xl">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-950 flex items-center justify-center mb-4 shadow-lg animate-bounce">
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
           </div>
-          <h3 className="text-lg font-bold text-violet-700 mb-1">Drop files here</h3>
-          <p className="text-sm text-violet-500">Images, mockups, screenshots — up to 10MB</p>
+          <h3 className="text-lg font-bold text-zinc-800 mb-1">Drop files here</h3>
+          <p className="text-sm text-zinc-500">Images, mockups, screenshots — up to 10MB</p>
         </div>
       )}
 
       {/* ── Header ── */}
-      <div className="h-12 border-b border-zinc-100 flex items-center justify-between px-4 shrink-0">
+      <div className="h-12 border-b border-zinc-100 flex items-center justify-end px-4 shrink-0">
 
         <div className="flex items-center gap-1">
-          {messages.length > 0 && (
-            <button onClick={clearChat} className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all" title="Clear chat">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
+
           <button onClick={onToggle} className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
@@ -379,8 +368,8 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
         {messages.length === 0 ? (
           /* Empty state */
           <div className="h-full flex flex-col items-center justify-center text-center px-8">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-200 flex items-center justify-center mb-4">
+              <svg className="w-7 h-7 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
             </div>
@@ -421,7 +410,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
                 {/* ── Status ── */}
                 {msg.role === "status" ? (
                   <div className="flex items-center gap-2 justify-center py-2">
-                    <div className="w-3 h-3 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin" />
                     <span className="text-xs text-zinc-500">{msg.content}</span>
                   </div>
                 ) : msg.role === "user" ? (
@@ -439,10 +428,10 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
                                 </div>
                               ) : (
                                 <div className="h-16 px-3 rounded-lg bg-white/10 border border-white/20 flex items-center gap-2">
-                                  <svg className="w-4 h-4 text-violet-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <svg className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
-                                  <span className="text-[10px] text-violet-100 font-medium truncate max-w-[80px]">{att.originalName}</span>
+                                  <span className="text-[10px] text-zinc-200 font-medium truncate max-w-[80px]">{att.originalName}</span>
                                 </div>
                               )}
                               <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block z-10">
@@ -454,7 +443,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
                           ))}
                         </div>
                       )}
-                      <div className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white rounded-2xl rounded-br-md px-3.5 py-2.5 text-[13px] leading-relaxed shadow-sm">
+                      <div className="bg-gradient-to-br from-zinc-800 to-zinc-950 text-white rounded-2xl rounded-br-md px-3.5 py-2.5 text-[13px] leading-relaxed shadow-sm">
                         {msg.content}
                       </div>
                     </div>
@@ -522,7 +511,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
       {pendingFiles.length > 0 && (
         <div className="px-3 pt-2 pb-1 border-t border-zinc-100 bg-zinc-50/30">
           <div className="flex items-center gap-1.5 mb-2">
-            <svg className="w-3 h-3 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3 text-zinc-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
             </svg>
             <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
@@ -565,22 +554,22 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
 
       {/* ── Uploading indicator ── */}
       {isUploading && (
-        <div className="px-4 py-2 border-t border-zinc-100 bg-violet-50/50 flex items-center gap-2">
-          <div className="w-3.5 h-3.5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-violet-600 font-medium">Uploading files...</span>
+        <div className="px-4 py-2 border-t border-zinc-100 bg-zinc-50/50 flex items-center gap-2">
+          <div className="w-3.5 h-3.5 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-zinc-600 font-medium">Uploading files...</span>
         </div>
       )}
 
       {/* ── Input ── */}
       <div className="p-3 border-t border-zinc-200 shrink-0">
-        <div className="relative bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+        <div className="relative bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden focus-within:border-zinc-400 focus-within:ring-2 focus-within:ring-zinc-100 transition-all">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
             onPaste={handlePaste}
-            placeholder={pendingFiles.length > 0 ? "Describe how to use these files..." : "Describe what to change, or paste/drop images..."}
+            placeholder={"What would you like to do?"}
             className="w-full bg-transparent px-4 pt-3 pb-10 text-sm resize-none focus:outline-none placeholder:text-zinc-400"
             rows={1}
             disabled={isLoading}
@@ -604,7 +593,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading || isUploading}
-              className="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all group"
+              className="p-2 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all group"
               title="Upload files (images, mockups, screenshots)"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -616,7 +605,7 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
             <button
               onClick={sendMessage}
               disabled={(!input.trim() && pendingFiles.length === 0) || isLoading}
-              className="p-2 bg-gradient-to-r from-violet-500 to-indigo-600 text-white rounded-lg hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-sm"
+              className="p-2 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white rounded-lg hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-sm"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18" />

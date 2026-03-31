@@ -21,7 +21,7 @@ export default function HomePageClient({ session }: { session: any }) {
           {/* Create */}
           <button
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-semibold px-6 py-3 rounded-xl hover:opacity-90 transition-all shadow-md active:scale-[0.98]"
+            className="inline-flex items-center gap-2.5 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white font-semibold px-6 py-3 rounded-xl hover:opacity-90 transition-all shadow-md active:scale-[0.98]"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />

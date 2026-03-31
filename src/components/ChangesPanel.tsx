@@ -41,17 +41,17 @@ export function ChangesPanel({
     return (
       <button
         onClick={() => setIsExpanded(true)}
-        className="fixed top-16 right-4 z-30 flex items-center gap-2 bg-white border border-violet-200 rounded-xl px-3.5 py-2.5 shadow-lg hover:shadow-xl transition-all group"
+        className="fixed top-16 right-4 z-30 flex items-center gap-2 bg-white border border-zinc-200 rounded-xl px-3.5 py-2.5 shadow-lg hover:shadow-xl transition-all group"
       >
         <div className="relative">
-          <svg className="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-zinc-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
-          <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-violet-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+          <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-zinc-800 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
             {changes.length}
           </div>
         </div>
-        <span className="text-xs font-semibold text-violet-700 group-hover:text-violet-800 transition-colors">
+        <span className="text-xs font-semibold text-zinc-700 group-hover:text-zinc-900 transition-colors">
           {changes.length} Change{changes.length > 1 ? "s" : ""}
         </span>
       </button>
@@ -61,9 +61,9 @@ export function ChangesPanel({
   return (
     <div className="fixed top-16 right-4 z-30 w-[320px] bg-white border border-zinc-200 rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-200">
       {/* ── Header ── */}
-      <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+      <div className="bg-gradient-to-r from-zinc-50 to-zinc-100 border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-950 flex items-center justify-center shadow-sm">
             <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
@@ -133,7 +133,7 @@ export function ChangesPanel({
         <button
           onClick={onConfirmAll}
           disabled={isConfirming || isReverting}
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:opacity-90 disabled:opacity-50 transition-all shadow-sm"
+          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white text-sm font-semibold py-2.5 rounded-xl hover:opacity-90 disabled:opacity-50 transition-all shadow-sm"
         >
           {isConfirming ? (
             <>

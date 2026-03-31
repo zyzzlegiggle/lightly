@@ -208,7 +208,7 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
                                     ? repo.framework === "next"
                                       ? "bg-black text-white"
                                       : repo.framework === "vite"
-                                      ? "bg-violet-100 text-violet-700"
+                                      ? "bg-zinc-100 text-zinc-700"
                                       : repo.framework === "react-scripts"
                                       ? "bg-sky-100 text-sky-700"
                                       : "bg-emerald-100 text-emerald-700"

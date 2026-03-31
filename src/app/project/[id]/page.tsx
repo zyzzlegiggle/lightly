@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams, useParams } from "next/navigation";
+import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -9,7 +9,11 @@ import { ChangesPanel, PendingChange } from "@/components/ChangesPanel";
 export default function WorkspacePage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const projectId = params?.id as string;
+
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(searchParams.get("preview") || null);
   const [statusData, setStatusData] = useState<any>(null);
@@ -54,6 +58,22 @@ export default function WorkspacePage() {
     if (projectId) poll();
     return () => { active = false; };
   }, [projectId]);
+
+  // ── Fetch projects list ──
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const res = await fetch("/api/projects");
+        if (res.ok) {
+          const data = await res.json();
+          setProjects(data.projects || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch projects list", err);
+      }
+    };
+    fetchProjects();
+  }, []);
 
   // ── Periodic health check via backend proxy (avoids CORS issues) ──
   useEffect(() => {
@@ -209,15 +229,51 @@ export default function WorkspacePage() {
           <img src="/logo.png" alt="Lightly" className="h-6 object-contain transform group-hover/logo:scale-105 transition-transform" />
         </Link>
         <div className="w-px h-5 bg-zinc-200" />
-        <span className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
-          {statusData?.projectName || "Project"}
-          {phase === "ACTIVE" && (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live
+        <div className="relative group/switcher">
+          <button
+            onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 transition-all cursor-pointer text-sm"
+          >
+            <span className="text-zinc-700 max-w-[150px] truncate">
+              {statusData?.projectName || projects.find(p => p.id === projectId)?.githubUrl.split("/").pop()?.replace(".git", "") || "Loading..."}
             </span>
+            <svg className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isSwitcherOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {isSwitcherOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setIsSwitcherOpen(false)} />
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-zinc-200 rounded-xl shadow-xl z-30 py-2 overflow-hidden animate-in fade-in zoom-in duration-150">
+                <div className="px-3 py-1.5 mb-1 border-b border-zinc-100">
+                  <span className="text-xs text-zinc-400">Projects</span>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        router.push(`/project/${p.id}`);
+                        setIsSwitcherOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex flex-col ${p.id === projectId
+                          ? 'bg-zinc-50 text-accent-primary font-medium'
+                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                        }`}
+                    >
+                      <span className="truncate">{p.githubUrl.split("/").pop()?.replace(".git", "")}</span>
+                      <span className="text-[10px] text-zinc-400 truncate">{p.githubUrl.replace("https://github.com/", "")}</span>
+                    </button>
+                  ))}
+                  {projects.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-zinc-400 italic">No other projects found</div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
-        </span>
+        </div>
       </div>
 
       {/* Main layout: sidebar + preview */}
