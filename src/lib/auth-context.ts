@@ -6,6 +6,7 @@
  */
 
 import { auth0 } from "./auth0";
+import { ensureUserExists } from "./ensure-user";
 
 export interface AuthContext {
   userId: string;
@@ -76,6 +77,9 @@ async function getGitHubTokenFromIdentity(userId: string): Promise<string | null
 export async function getAuthContext(): Promise<AuthContext | null> {
   const session = await auth0.getSession();
   if (!session?.user) return null;
+
+  // Ensure the Auth0 user exists in the local DB (satisfies FK constraints)
+  await ensureUserExists(session.user);
 
   const githubToken = await getGitHubTokenFromIdentity(session.user.sub);
 
