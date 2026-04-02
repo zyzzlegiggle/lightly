@@ -15,6 +15,13 @@
       "when": 1773818848257,
       "tag": "0001_aromatic_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775128572381,
+      "tag": "0002_milky_hercules",
+      "breakpoints": true
     }
   ]
 }

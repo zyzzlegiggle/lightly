@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { project } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
+import { getSlackToken, createSlackChannel, postWelcomeMessage } from "@/lib/slack-service";
 
 export async function GET() {
   const session = await auth0.getSession();
@@ -18,9 +19,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const session = await auth0.getSession();
   const ctx = await getAuthContext();
 
-  if (!ctx) {
+  if (!ctx || !session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -91,7 +93,26 @@ export async function POST(req: Request) {
       appSpecRaw,
     }).returning();
 
-    return Response.json({ project: newProject[0], liveUrl });
+    // Auto-create a Slack channel for this project if the user has Slack connected
+    let slackChannelId: string | null = null;
+    try {
+      const slackToken = await getSlackToken(userId);
+      if (slackToken) {
+        const channelName = name || `project-${newProject[0].id.slice(0, 8)}`;
+        slackChannelId = await createSlackChannel(slackToken, channelName);
+        if (slackChannelId) {
+          await db.update(project)
+            .set({ slackChannelId })
+            .where(eq(project.id, newProject[0].id));
+          await postWelcomeMessage(slackToken, slackChannelId, name || channelName);
+        }
+      }
+    } catch (err) {
+      // Slack is optional — don't fail project creation if it errors
+      console.warn("[Projects] Slack channel creation skipped:", err);
+    }
+
+    return Response.json({ project: { ...newProject[0], slackChannelId }, liveUrl });
 
   } catch (err: any) {
     console.error("Error creating project:", err);

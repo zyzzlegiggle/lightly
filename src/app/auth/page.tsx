@@ -6,5 +6,5 @@ import { redirect } from "next/navigation";
  * The /auth/login route is handled by the Auth0 SDK middleware.
  */
 export default function AuthPage() {
-    redirect("/auth/login");
+    redirect("/api/auth/login");
 }

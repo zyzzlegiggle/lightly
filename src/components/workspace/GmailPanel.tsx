@@ -11,7 +11,7 @@ export function GmailPanel() {
       <p className="text-sm font-semibold text-zinc-800 mb-1">Gmail</p>
       <p className="text-xs text-zinc-400 mb-5">Read and send emails with AI.</p>
       <a
-        href="/api/auth/login?connection=google-oauth2"
+        href="/api/auth/connect?connection=google-oauth2"
         className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-white text-sm py-2.5 rounded-xl hover:bg-zinc-700 transition-colors"
       >
         Connect Gmail

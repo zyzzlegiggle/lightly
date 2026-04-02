@@ -7,7 +7,7 @@ export default async function SettingsPage() {
   const session = await auth0.getSession();
 
   if (!session) {
-    redirect("/auth/login");
+    redirect("/api/auth/login");
   }
 
   return (

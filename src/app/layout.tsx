@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Auth0Provider } from "@auth0/nextjs-auth0";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,7 +24,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased`}
       >
-        {children}
+        <Auth0Provider>
+          {children}
+        </Auth0Provider>
       </body>
     </html>
   );

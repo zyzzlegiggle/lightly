@@ -55,7 +55,7 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
   const linkGithub = () => {
     // Redirect to Auth0 login with GitHub connection
     // Auth0 will handle the OAuth flow and store the token in Token Vault
-    window.location.href = "/auth/login?connection=github&returnTo=" + encodeURIComponent(window.location.href);
+    window.location.href = "/api/auth/login?connection=github&returnTo=" + encodeURIComponent(window.location.href);
   };
   
   const handleSelectRepo = async (repo: any) => {
