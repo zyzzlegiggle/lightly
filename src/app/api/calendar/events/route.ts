@@ -1,15 +1,13 @@
 import { auth0 } from "@/lib/auth0";
 import { db } from "@/lib/db";
-import { account } from "@/lib/schema";
-import { and, eq } from "drizzle-orm";
+import { workspaceEvent } from "@/lib/schema";
+import { getServiceToken } from "@/lib/tokens";
+import { and, eq, gte, lte } from "drizzle-orm";
 
 const GCAL_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 async function getGoogleToken(userId: string): Promise<string | null> {
-  const row = await db.query.account.findFirst({
-    where: and(eq(account.userId, userId), eq(account.providerId, "google-oauth2")),
-  });
-  return row?.accessToken ?? null;
+  return getServiceToken(userId, "google-oauth2");
 }
 
 // GET /api/calendar/events?from=&to=
@@ -25,42 +23,87 @@ export async function GET(req: Request) {
   const from = searchParams.get("from") || new Date().toISOString();
   const to = searchParams.get("to") || new Date(Date.now() + 30 * 86400000).toISOString();
 
+  const events: any[] = [];
+  const authHeaders = { Authorization: `Bearer ${token}` };
+
   try {
-    const params = new URLSearchParams({
-      timeMin: from,
-      timeMax: to,
-      maxResults: "50",
-      singleEvents: "true",
-      orderBy: "startTime",
-    });
-
-    const resp = await fetch(`${GCAL_BASE}?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      console.error("[Calendar] List events failed:", err);
-      return Response.json({ connected: true, events: [], error: "api_error" });
+    // ── 1. Fetch Google Calendar events ─────────────────────────────────────
+    const gRes = await fetch(
+      `${GCAL_BASE}?${new URLSearchParams({
+        timeMin: from,
+        timeMax: to,
+        singleEvents: "true",
+        orderBy: "startTime",
+      })}`,
+      { headers: authHeaders }
+    );
+    if (gRes.ok) {
+      const data = await gRes.json();
+      (data.items || []).forEach((e: any) => {
+        events.push({
+          id: `g-${e.id}`,
+          title: e.summary || "(no title)",
+          description: e.description || "",
+          startAt: e.start?.dateTime || e.start?.date || "",
+          endAt: e.end?.dateTime || e.end?.date || "",
+          allDay: !!e.start?.date,
+          color: "blue",
+          source: "google",
+          htmlLink: e.htmlLink || "",
+        });
+      });
     }
 
-    const data = await resp.json();
-    const events = (data.items || []).map((e: any) => ({
-      id: e.id,
-      title: e.summary || "(no title)",
-      description: e.description || "",
-      startAt: e.start?.dateTime || e.start?.date || "",
-      endAt: e.end?.dateTime || e.end?.date || "",
-      allDay: !!e.start?.date,
-      color: "blue", // Google Calendar events get a blue accent
-      source: "google",
-      htmlLink: e.htmlLink || "",
-    }));
+    // ── 2. Fetch Google Tasks ───────────────────────────────────────────────
+    try {
+      const tasksRes = await fetch("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?showCompleted=true", {
+        headers: authHeaders
+      });
+      if (tasksRes.ok) {
+        const tasksData = await tasksRes.json();
+        (tasksData.items || []).forEach((t: any) => {
+          if (t.due) {
+            events.push({
+              id: `t-${t.id}`,
+              title: `Task: ${t.title || "(no title)"}`,
+              description: t.notes || "",
+              startAt: t.due, // Tasks only have a due date
+              allDay: true,
+              color: "amber", // Distinct color for tasks
+              source: "google-task",
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.error("[Calendar] Google Tasks fetch failed:", e);
+    }
 
-    return Response.json({ connected: true, events });
-  } catch (e) {
-    console.error("[Calendar] Error:", e);
-    return Response.json({ connected: true, events: [], error: "fetch_error" });
+    // ── 3. Fetch local workspace events ─────────────────────────────────────
+    const local = await db.query.workspaceEvent.findMany({
+      where: and(
+        eq(workspaceEvent.userId, session.user.sub),
+        gte(workspaceEvent.startAt, new Date(from)),
+        lte(workspaceEvent.startAt, new Date(to))
+      ),
+    });
+    local.forEach((e: any) => {
+      events.push({
+        id: e.id,
+        title: e.title,
+        description: e.description || "",
+        startAt: e.startAt.toISOString(),
+        endAt: e.endAt?.toISOString() || null,
+        allDay: e.allDay,
+        color: e.color || "zinc",
+        source: "local",
+      });
+    });
+
+    return Response.json({ events, connected: true });
+  } catch (error) {
+    console.error("[Calendar] GET Error:", error);
+    return Response.json({ error: "Server Error" }, { status: 500 });
   }
 }
 

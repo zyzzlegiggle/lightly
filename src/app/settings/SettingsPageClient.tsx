@@ -20,9 +20,11 @@ interface Profile {
 export default function SettingsPageClient({
   profile,
   connectedProviders,
+  mainProvider,
 }: {
   profile: Profile;
   connectedProviders: string[];
+  mainProvider?: string;
 }) {
   const router = useRouter();
   const [slackWorkspaces, setSlackWorkspaces] = useState<SlackWorkspace[]>([]);
@@ -112,8 +114,15 @@ export default function SettingsPageClient({
                       <p className="text-xs text-text-muted">Connected for code access</p>
                     </div>
                   </div>
-                  <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
-                    Active
+                  <div className="flex items-center gap-2">
+                    {mainProvider === "github" && (
+                      <div className="px-2 py-1 bg-zinc-900 text-white text-[10px] font-bold rounded uppercase tracking-tight">
+                        Main Account
+                      </div>
+                    )}
+                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
+                      Active
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -210,8 +219,15 @@ export default function SettingsPageClient({
                       <p className="text-xs text-text-muted">Connected for email access</p>
                     </div>
                   </div>
-                  <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
-                    Active
+                  <div className="flex items-center gap-2">
+                    {mainProvider === "google-oauth2" && (
+                      <div className="px-2 py-1 bg-zinc-900 text-white text-[10px] font-bold rounded uppercase tracking-tight">
+                        Main Account
+                      </div>
+                    )}
+                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
+                      Active
+                    </div>
                   </div>
                 </div>
               ) : (

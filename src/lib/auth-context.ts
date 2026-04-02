@@ -7,6 +7,9 @@
 
 import { auth0 } from "./auth0";
 import { ensureUserExists } from "./ensure-user";
+import { db } from "./db";
+import { account } from "./schema";
+import { and, eq } from "drizzle-orm";
 
 export interface AuthContext {
   userId: string;
@@ -104,7 +107,22 @@ export async function getAuthContextResult(): Promise<AuthContextResult> {
   // Ensure the Auth0 user exists in the local DB (satisfies FK constraints)
   await ensureUserExists(session.user);
 
-  const githubToken = await getGitHubTokenFromIdentity(session.user.sub);
+  let githubToken = await getGitHubTokenFromIdentity(session.user.sub);
+
+  // ── Fallback: Check local account table in DB ──
+  if (!githubToken) {
+    console.log(`[AuthContext] Management API did not yield GitHub token for ${session.user.sub}, checking local DB...`);
+    const connections = await db.query.account.findMany({
+      where: eq(account.userId, session.user.sub),
+    });
+    console.log(`[AuthContext] Found ${connections.length} connected service(s) in DB for ${session.user.sub}:`, connections.map(c => c.providerId));
+    
+    const localAccount = connections.find(c => c.providerId === "github");
+    githubToken = localAccount?.accessToken || null;
+    if (githubToken) {
+      console.log("[AuthContext] Found GitHub token in local account table for:", session.user.sub);
+    }
+  }
 
   if (!githubToken) {
     console.warn("[AuthContext] No GitHub token found for user:", session.user.sub);

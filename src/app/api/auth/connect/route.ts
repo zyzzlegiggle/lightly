@@ -54,6 +54,18 @@ export async function GET(req: Request) {
     state,
   });
 
+  // For GitHub, we need repo and user scopes to manage repositories
+  if (connection === "github") {
+    params.append("connection_scope", "repo,user,read:org");
+  } else if (connection === "google-oauth2") {
+    // For Google/Gmail/Calendar/Tasks
+    params.append("connection_scope", [
+      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/tasks.readonly"
+    ].join(" "));
+  }
+
   console.log(`[Connect] Initiating ${connection} connection for user ${session.user.sub}`);
   console.log(`[Connect] Callback URL: ${callbackUrl}`);
   console.log(`[Connect] Full authorize URL: https://${domain}/authorize?${params}`);

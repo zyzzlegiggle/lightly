@@ -26,13 +26,14 @@ export default async function SettingsPage() {
   });
 
   const profile = {
-    name: dbUser?.name || session.user.name,
-    email: dbUser?.email || session.user.email,
-    image: dbUser?.image || session.user.picture,
-    username: dbUser?.username || session.user.nickname,
+    name: dbUser?.name || session.user.name || "User",
+    email: dbUser?.email || session.user.email || "",
+    image: dbUser?.image || session.user.picture || null,
+    username: dbUser?.username || session.user.nickname || null,
   };
 
   const connectedProviders = connectedAccounts.map((a) => a.providerId);
+  const mainProvider = userId.split("|")[0]; // e.g. "github" or "google-oauth2"
 
   return (
     <div className="flex h-screen w-full bg-background font-sans">
@@ -40,7 +41,11 @@ export default async function SettingsPage() {
       <main className="flex-1 overflow-y-auto">
         <div className="p-8 max-w-4xl mx-auto w-full">
           <h1 className="text-2xl font-bold mb-6">Settings</h1>
-          <SettingsPageClient profile={profile} connectedProviders={connectedProviders} />
+          <SettingsPageClient 
+            profile={profile} 
+            connectedProviders={connectedProviders} 
+            mainProvider={mainProvider}
+          />
         </div>
       </main>
     </div>

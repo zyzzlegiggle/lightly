@@ -64,6 +64,18 @@ function isImageType(contentType: string): boolean {
   return contentType.startsWith("image/");
 }
 
+function formatContent(content: string) {
+  if (!content) return null;
+  // Simple bold markdown
+  const parts = content.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 // ── Component ──────────────────────────────────────────────────────────
 
 export function ChatSidebar({ 
@@ -464,8 +476,48 @@ export function ChatSidebar({
                   <div className="flex justify-start">
                     <div className="space-y-2 max-w-[90%]">
                       {/* Message bubble */}
-                      <div className="bg-zinc-50 border border-zinc-100 rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[13px] text-zinc-700 leading-relaxed whitespace-pre-wrap">
-                        {msg.content || (
+                      <div className="bg-zinc-50 border border-zinc-100 rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[13px] text-zinc-700 leading-relaxed whitespace-pre-wrap shadow-sm">
+                        {msg.content ? (
+                          <>
+                            {formatContent(msg.content)}
+                            {/* ── Action Buttons (Gmail/Calendar) INSIDE bubble ── */}
+                            {msg.actions && msg.actions.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-zinc-200/50">
+                                {msg.actions.map((action, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={(e) => {
+                                      if (action.tab && onTabChange) {
+                                        e.preventDefault();
+                                        onTabChange(action.tab);
+                                      } else {
+                                        window.open(action.url, "_blank");
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-2 bg-white border border-zinc-200 hover:border-zinc-800 hover:bg-zinc-100 px-3 py-1.5 rounded-lg transition-all shadow-sm group text-left"
+                                  >
+                                    {action.icon === "calendar" && (
+                                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                    )}
+                                    {action.icon === "email" && (
+                                      <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                    )}
+                                    {(!action.icon || action.icon === "external") && (
+                                      <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    )}
+                                    <span className="text-[11px] font-semibold text-zinc-900">{action.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        ) : (
                           <span className="flex gap-1 py-0.5">
                             <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
                             <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
@@ -493,43 +545,6 @@ export function ChatSidebar({
                               </div>
                             ))}
                           </div>
-                        </div>
-                      )}
-
-                      {/* ── Action Buttons (Gmail/Calendar) ── */}
-                      {msg.actions && msg.actions.length > 0 && (
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {msg.actions.map((action, i) => (
-                            <button
-                              key={i}
-                              onClick={(e) => {
-                                if (action.tab && onTabChange) {
-                                  e.preventDefault();
-                                  onTabChange(action.tab);
-                                } else {
-                                  window.open(action.url, "_blank");
-                                }
-                              }}
-                              className="inline-flex items-center gap-2 bg-white border border-zinc-200 hover:border-zinc-800 hover:bg-zinc-50 text-zinc-800 px-3 py-2 rounded-xl transition-all shadow-sm group text-left"
-                            >
-                              {action.icon === "calendar" && (
-                                <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              )}
-                              {action.icon === "email" && (
-                                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              )}
-                              {!action.icon || action.icon === "external" && (
-                                <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                              )}
-                              <span className="text-[11px] font-semibold">{action.label}</span>
-                            </button>
-                          ))}
                         </div>
                       )}
                     </div>

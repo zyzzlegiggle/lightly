@@ -15,6 +15,7 @@ import requests
 from pydantic import BaseModel
 from gmail_service import GmailService
 from calendar_service import CalendarService
+from tasks_service import TasksService
 from datetime import datetime
 from typing import Optional
 
@@ -53,20 +54,24 @@ PLAN_PROMPT = (
     "You are an AI Workspace Assistant. You have these capabilities:\n"
     "1. **Code Editing**: Analyzing and modifying the project's source code.\n"
     "2. **Gmail**: Search, read, send, and reply to the user's emails.\n"
-    "3. **Calendar**: Search, list, and create events in Google Calendar.\n\n"
-    "Given the file tree, current page, and user request, determine the best action.\n\n"
+    "3. **Calendar**: Search, list, and create events in Google Calendar.\n"
+    "4. **Tasks**: List, create, and mark tasks as complete in Google Tasks.\n\n"
+    "Determine the best action (JSON only):\n"
     "─── GMAIL TOOLS ───\n"
-    "Search: {\"gmail_search\": {\"query\": \"search query\", \"max_results\": 5}, \"plan\": \"searching gmail\"}\n"
-    "Read single email: {\"gmail_read\": {\"message_id\": \"id\"}, \"plan\": \"reading email\"}\n"
-    "Send email: {\"gmail_send\": {\"to\": \"email@x.com\", \"subject\": \"...\", \"body\": \"...\"}, \"plan\": \"sending email\"}\n"
-    "Reply to email: {\"gmail_reply\": {\"message_id\": \"id\", \"body\": \"reply text\"}, \"plan\": \"replying to email\"}\n\n"
+    "Search: {\"gmail_search\": {\"query\": \"query\", \"max_results\": 5}}\n"
+    "Read: {\"gmail_read\": {\"message_id\": \"id\"}}\n"
+    "Send: {\"gmail_send\": {\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}}\n\n"
     "─── CALENDAR TOOLS ───\n"
-    "Search events: {\"calendar_search\": {\"query\": \"meeting\", \"max_results\": 10}, \"plan\": \"searching calendar\"}\n"
-    "List upcoming: {\"calendar_list\": {\"max_results\": 10}, \"plan\": \"listing upcoming events\"}\n"
-    "Create event: {\"calendar_create\": {\"summary\": \"Title\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}, \"plan\": \"creating event\"}\n\n"
+    "Search events: {\"calendar_search\": {\"query\": \"...\"}}\n"
+    "List upcoming: {\"calendar_list\": {\"max_results\": 10}}\n"
+    "Create event: {\"calendar_create\": {\"summary\": \"...\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}}\n\n"
+    "─── TASKS TOOLS ───\n"
+    "List tasks: {\"tasks_list\": {}}\n"
+    "Create task: {\"tasks_create\": {\"title\": \"Title\", \"due\": \"ISO-8601\", \"notes\": \"...\"}}\n"
+    "Update task: {\"tasks_update\": {\"task_id\": \"id\", \"status\": \"needsAction|completed\"}}\n\n"
     "─── CODE TOOL ───\n"
-    "Pick files to read (max 8): {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
-    "If vague, return: {\"clarify\": \"question\", \"files_to_read\": [], \"plan\": \"\"}"
+    "Pick files: {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
+    "Clarify/Chat: {\"clarify\": \"question\", \"plan\": \"\"}"
 )
 
 EDIT_PROMPT = (
@@ -423,13 +428,91 @@ def handle_calendar_create(req, plan, hist):
             start_time=details.get("start_time"),
             description=details.get("description", ""),
         )
-        start = event.get("start", {}).get("dateTime", "")
+        start = event.get("start", {}).get("dateTime", "") or event.get("start", {}).get("date", "")
         yield sse("message", 
             content=f"✅ Created: **{event.get('summary')}**\nScheduled for: {start}",
             actions=[{"label": "View in Calendar", "url": event.get("htmlLink", ""), "icon": "calendar", "tab": "calendar"}]
         )
     except Exception as e:
         yield sse("message", content=f"Sorry, I couldn't create that event: {str(e)}")
+    yield sse("done")
+
+
+# ── Tasks tool handlers ────────────────────────────────────────────────
+
+def handle_tasks_list(req, plan, hist):
+    """List Google Tasks."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    yield sse("status", content="Fetching your to-do list...")
+    
+    try:
+        tasks_svc = TasksService(req.googleAccessToken)
+        tasks = tasks_svc.list_tasks(show_completed=False)
+        yield sse("status", content=f"Summarizing {len(tasks)} task(s)...")
+        summary = call_llm([
+            {"role": "system", "content": "You are a professional assistant. Present the user's tasks in a clear list. Group by due date if possible."},
+            *hist,
+            {"role": "user", "content": f"Tasks found:\n{json.dumps(tasks, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", 
+            content=summary,
+            actions=[{"label": "Open Tasks", "url": "https://calendar.google.com/calendar/u/0/r", "icon": "calendar", "tab": "calendar"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't access your tasks: {str(e)}")
+    yield sse("done")
+
+
+def handle_tasks_create(req, plan, hist):
+    """Create a new task."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    details = plan["tasks_create"]
+    yield sse("status", content=f"Creating task '{details.get('title')}'...")
+    
+    try:
+        tasks_svc = TasksService(req.googleAccessToken)
+        task = tasks_svc.create_task(
+            title=details.get("title"),
+            notes=details.get("notes", ""),
+            due=details.get("due"),
+        )
+        yield sse("message", 
+            content=f"✅ Task created: **{task.get('title')}**",
+            actions=[{"label": "Browse Workspace", "url": "https://calendar.google.com/calendar/u/0/r", "icon": "calendar", "tab": "calendar"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't create that task: {str(e)}")
+    yield sse("done")
+
+
+def handle_tasks_update(req, plan, hist):
+    """Update task status."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    details = plan["tasks_update"]
+    yield sse("status", content="Updating task status...")
+    
+    try:
+        tasks_svc = TasksService(req.googleAccessToken)
+        task = tasks_svc.update_task(
+            task_id=details.get("task_id"),
+            status=details.get("status"),
+        )
+        status_text = "completed" if task.get("status") == "completed" else "needs action"
+        yield sse("message", content=f"✅ Task **{task.get('title')}** marked as {status_text}.")
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't update that task: {str(e)}")
     yield sse("done")
 
 
@@ -510,6 +593,15 @@ def run_agent(req: AgentChatRequest):
             return
         if "calendar_create" in plan:
             yield from handle_calendar_create(req, plan, hist)
+            return
+        if "tasks_list" in plan:
+            yield from handle_tasks_list(req, plan, hist)
+            return
+        if "tasks_create" in plan:
+            yield from handle_tasks_create(req, plan, hist)
+            return
+        if "tasks_update" in plan:
+            yield from handle_tasks_update(req, plan, hist)
             return
 
         files_to_read = plan.get("files_to_read", [])[:8]

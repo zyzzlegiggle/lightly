@@ -1,15 +1,10 @@
 import { auth0 } from "@/lib/auth0";
-import { db } from "@/lib/db";
-import { account } from "@/lib/schema";
-import { and, eq } from "drizzle-orm";
+import { getServiceToken } from "@/lib/tokens";
 
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 async function getGoogleToken(userId: string): Promise<string | null> {
-  const row = await db.query.account.findFirst({
-    where: and(eq(account.userId, userId), eq(account.providerId, "google-oauth2")),
-  });
-  return row?.accessToken ?? null;
+  return getServiceToken(userId, "google-oauth2");
 }
 
 function parseHeaders(headers: any[]): Record<string, string> {
