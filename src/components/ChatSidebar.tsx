@@ -9,6 +9,7 @@ interface ChatMessage {
   role: "user" | "assistant" | "status";
   content: string;
   changesDescription?: string[];
+  actions?: { label: string; url: string; icon?: "calendar" | "email" | "external"; tab?: string }[];
   timestamp: number;
   attachments?: UploadedFile[];
 }
@@ -28,6 +29,7 @@ interface ChatSidebarProps {
   onToggle: () => void;
   onDeployTriggered?: () => void;
   onChangesProposed?: (changes: any[]) => void;
+  onTabChange?: (tab: any) => void;
   currentPage?: string;
 }
 
@@ -64,7 +66,15 @@ function isImageType(contentType: string): boolean {
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggered, onChangesProposed, currentPage = "/" }: ChatSidebarProps) {
+export function ChatSidebar({ 
+  projectId, 
+  isCollapsed, 
+  onToggle, 
+  onDeployTriggered, 
+  onChangesProposed, 
+  onTabChange,
+  currentPage = "/" 
+}: ChatSidebarProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -281,7 +291,8 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
               });
             } else if (evt.type === "message") {
               assistantContent = evt.content;
-              setMessages((p) => p.map((m) => (m.id === assistantId ? { ...m, content: assistantContent } : m)));
+              const actions = evt.actions;
+              setMessages((p) => p.map((m) => (m.id === assistantId ? { ...m, content: assistantContent, actions: actions || m.actions } : m)));
             } else if (evt.type === "files_changed") {
               // files_changed now has designer-friendly descriptions, not file paths
               setMessages((p) => p.map((m) => (m.id === assistantId ? { ...m, changesDescription: evt.files } : m)));
@@ -482,6 +493,43 @@ export function ChatSidebar({ projectId, isCollapsed, onToggle, onDeployTriggere
                               </div>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* ── Action Buttons (Gmail/Calendar) ── */}
+                      {msg.actions && msg.actions.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {msg.actions.map((action, i) => (
+                            <button
+                              key={i}
+                              onClick={(e) => {
+                                if (action.tab && onTabChange) {
+                                  e.preventDefault();
+                                  onTabChange(action.tab);
+                                } else {
+                                  window.open(action.url, "_blank");
+                                }
+                              }}
+                              className="inline-flex items-center gap-2 bg-white border border-zinc-200 hover:border-zinc-800 hover:bg-zinc-50 text-zinc-800 px-3 py-2 rounded-xl transition-all shadow-sm group text-left"
+                            >
+                              {action.icon === "calendar" && (
+                                <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                              {action.icon === "email" && (
+                                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                              {!action.icon || action.icon === "external" && (
+                                <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              )}
+                              <span className="text-[11px] font-semibold">{action.label}</span>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>

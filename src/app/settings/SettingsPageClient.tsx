@@ -10,12 +10,27 @@ interface SlackWorkspace {
   connectedAt: string;
 }
 
-export default function SettingsPageClient({ session }: { session: any }) {
+interface Profile {
+  name: string;
+  email: string;
+  image: string | null;
+  username: string | null;
+}
+
+export default function SettingsPageClient({
+  profile,
+  connectedProviders,
+}: {
+  profile: Profile;
+  connectedProviders: string[];
+}) {
   const router = useRouter();
   const [slackWorkspaces, setSlackWorkspaces] = useState<SlackWorkspace[]>([]);
   const [loadingSlack, setLoadingSlack] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [githubLinked, setGithubLinked] = useState<boolean | null>(null); // null = loading
+
+  const googleConnected = connectedProviders.includes("google-oauth2");
 
   useEffect(() => {
     fetch("/api/slack/workspaces")
@@ -54,17 +69,17 @@ export default function SettingsPageClient({ session }: { session: any }) {
 
         <div className="space-y-6">
           <div className="flex items-center gap-4 p-4 bg-zinc-50 rounded-xl border border-border-subtle">
-            {session.user.picture ? (
-              <img src={session.user.picture} alt="" className="w-12 h-12 rounded-full ring-2 ring-white" />
+            {profile.image ? (
+              <img src={profile.image} alt="" className="w-12 h-12 rounded-full ring-2 ring-white" />
             ) : (
               <div className="w-12 h-12 rounded-full bg-zinc-200 flex items-center justify-center text-lg font-bold">
-                {session.user.name?.[0]}
+                {profile.name?.[0]}
               </div>
             )}
             <div className="flex-1">
-              <p className="font-bold text-text-primary">{session.user.name}</p>
-              <p className="text-sm text-text-muted">{session.user.email}</p>
-              {session.user.nickname && <p className="text-xs text-accent-primary font-medium mt-1">@{session.user.nickname}</p>}
+              <p className="font-bold text-text-primary">{profile.name}</p>
+              <p className="text-sm text-text-muted">{profile.email}</p>
+              {profile.username && <p className="text-xs text-accent-primary font-medium mt-1">@{profile.username}</p>}
             </div>
           </div>
 
@@ -178,8 +193,8 @@ export default function SettingsPageClient({ session }: { session: any }) {
                 </div>
               </a>
 
-              {/* Google / Gmail */}
-              {(session.user.sub?.includes("google") || session.user.identities?.some((id: any) => id.provider === "google-oauth2")) ? (
+              {/* Google / Gmail — checked from DB account table, not session */}
+              {googleConnected ? (
                 <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-white shadow-sm border border-border-subtle flex items-center justify-center">

@@ -1,4 +1,5 @@
 import requests
+import base64
 from typing import List, Dict, Optional
 
 class GmailService:
@@ -23,16 +24,19 @@ class GmailService:
         resp.raise_for_status()
         data = resp.json()
         
-        # Extract basic info
         headers = data.get("payload", {}).get("headers", [])
         subject = next((h["value"] for h in headers if h["name"] == "Subject"), "No Subject")
         from_email = next((h["value"] for h in headers if h["name"] == "From"), "Unknown")
+        to_email = next((h["value"] for h in headers if h["name"] == "To"), "")
         snippet = data.get("snippet", "")
+        thread_id = data.get("threadId", "")
         
         return {
             "id": message_id,
+            "threadId": thread_id,
             "subject": subject,
             "from": from_email,
+            "to": to_email,
             "snippet": snippet,
             "date": next((h["value"] for h in headers if h["name"] == "Date"), ""),
         }
@@ -52,10 +56,38 @@ class GmailService:
                 first_msg = t_data.get("messages", [{}])[0]
                 headers = first_msg.get("payload", {}).get("headers", [])
                 subject = next((h["value"] for h in headers if h["name"] == "Subject"), "No Subject")
+                from_email = next((h["value"] for h in headers if h["name"] == "From"), "Unknown")
                 result.append({
                     "id": t["id"],
                     "subject": subject,
+                    "from": from_email,
                     "snippet": t_data.get("messages", [{}])[-1].get("snippet", ""),
                     "messageCount": len(t_data.get("messages", []))
                 })
         return result
+
+    def send_message(self, to: str, subject: str, body: str, thread_id: Optional[str] = None) -> Dict:
+        """Send an email or reply to a thread."""
+        # Build RFC 2822 raw email
+        raw_lines = [
+            f"To: {to}",
+            f"Subject: {subject}",
+            "Content-Type: text/plain; charset=utf-8",
+            "MIME-Version: 1.0",
+            "",
+            body,
+        ]
+        raw = "\r\n".join(raw_lines)
+        encoded = base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+        payload: Dict = {"raw": encoded}
+        if thread_id:
+            payload["threadId"] = thread_id
+
+        resp = requests.post(
+            f"{self.base_url}/messages/send",
+            headers=self.headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+        return resp.json()

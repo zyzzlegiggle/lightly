@@ -15,7 +15,18 @@ interface Project {
   appSpecRaw?: any;
 }
 
-export function Sidebar({ session, onNewProject }: { session: any; onNewProject?: () => void }) {
+interface Profile {
+  name: string;
+  email: string;
+  image: string | null;
+  username: string | null;
+}
+
+export function Sidebar({ session, profile, onNewProject }: { session: any; profile?: Profile; onNewProject?: () => void }) {
+  // Use DB profile if available, fall back to session for backwards compat
+  const displayName = profile?.name || session.user.name;
+  const displayImage = profile?.image || session.user.picture;
+  const displayUsername = profile?.username || session.user.nickname;
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -109,17 +120,17 @@ export function Sidebar({ session, onNewProject }: { session: any; onNewProject?
       <nav className={`flex-1 flex flex-col pt-4 pb-4 overflow-y-auto ${isCollapsed ? "px-2" : "px-3"}`}>
         {/* User Profile */}
         <div className={`flex items-center gap-3 p-2 mb-4 cursor-pointer hover:bg-black/[0.03] rounded-lg transition-colors ${isCollapsed ? "justify-center" : ""}`}>
-          {session.user.picture ? (
-            <img src={session.user.picture} alt="Avatar" className="w-8 h-8 rounded-full shrink-0" />
+          {displayImage ? (
+            <img src={displayImage} alt="Avatar" className="w-8 h-8 rounded-full shrink-0" />
           ) : (
             <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-xs shrink-0">
-              {session.user.name?.[0] || "?"}
+              {displayName?.[0] || "?"}
             </div>
           )}
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{session.user.name}</p>
-              {session.user.nickname && <p className="text-xs text-zinc-500 truncate">@{session.user.nickname}</p>}
+              <p className="text-sm font-medium truncate">{displayName}</p>
+              {displayUsername && <p className="text-xs text-zinc-500 truncate">@{displayUsername}</p>}
             </div>
           )}
         </div>

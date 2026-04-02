@@ -3,6 +3,9 @@ AI Agent for Lightly — explores codebase, makes changes via GitHub API, trigge
 Uses DigitalOcean GenAI for LLM inference.
 Token-optimized: 2-pass approach (plan files → edit files).
 No git clone needed — pure GitHub REST API (like sparkles.dev / Replit).
+
+Service integrations: Gmail + Google Calendar + Slack
+Tokens are passed directly from the Next.js frontend (stored in DB, no Token Vault needed).
 """
 
 import os
@@ -13,6 +16,7 @@ from pydantic import BaseModel
 from gmail_service import GmailService
 from calendar_service import CalendarService
 from datetime import datetime
+from typing import Optional
 
 # ── Models ──────────────────────────────────────────────────────────────
 
@@ -38,27 +42,31 @@ class AgentChatRequest(BaseModel):
     syncToken: str | None = None
     currentPage: str = "/"
     attachments: list[UploadedAttachment] = []
-    auth0RefreshToken: str | None = None
+    # Service tokens — passed directly from the DB, no Token Vault needed
+    googleAccessToken: Optional[str] = None
+    slackAccessToken: Optional[str] = None
+    slackChannelId: Optional[str] = None
 
 # ── Prompts (kept short for token efficiency) ───────────────────────────
 
 PLAN_PROMPT = (
-    "You are an AI Workspace Assistant. You have three main capabilities:\n"
+    "You are an AI Workspace Assistant. You have these capabilities:\n"
     "1. **Code Editing**: Analyzing and modifying the project's source code.\n"
-    "2. **Gmail Services**: Searching, reading, and summarizing the user's emails.\n"
-    "3. **Calendar Services**: Searching, reading, and CREATING events in the user's Google Calendar.\n\n"
-    "Given the file tree, current page, and user request, determine the best course of action.\n"
-    "For GMAIL, use the `gmail_search` tool.\n"
-    'Return JSON: {"gmail_search": {"query": "search query", "max_results": 5}, "plan": "searching gmail"}\n\n'
-    "For CALENDAR SEARCH, use the `calendar_search` tool.\n"
-    'Return JSON: {"calendar_search": {"query": "meeting", "max_results": 10}, "plan": "searching calendar"}\n\n'
-    "For CALENDAR CREATE, use the `calendar_create` tool.\n"
-    "Provide start_time in ISO-8601 format (e.g., '2026-04-02T16:00:00Z').\n"
-    'Return JSON: {"calendar_create": {"summary": "Event Title", "start_time": "...", "description": "..."}, "plan": "creating event"}\n\n'
-    "For CODE, pick files to read (max 8).\n"
-    'Return JSON: {"files_to_read": ["path"], "plan": "brief plan"}\n\n'
-    "If vague, return "
-    '{"clarify": "question", "files_to_read": [], "plan": ""}'
+    "2. **Gmail**: Search, read, send, and reply to the user's emails.\n"
+    "3. **Calendar**: Search, list, and create events in Google Calendar.\n\n"
+    "Given the file tree, current page, and user request, determine the best action.\n\n"
+    "─── GMAIL TOOLS ───\n"
+    "Search: {\"gmail_search\": {\"query\": \"search query\", \"max_results\": 5}, \"plan\": \"searching gmail\"}\n"
+    "Read single email: {\"gmail_read\": {\"message_id\": \"id\"}, \"plan\": \"reading email\"}\n"
+    "Send email: {\"gmail_send\": {\"to\": \"email@x.com\", \"subject\": \"...\", \"body\": \"...\"}, \"plan\": \"sending email\"}\n"
+    "Reply to email: {\"gmail_reply\": {\"message_id\": \"id\", \"body\": \"reply text\"}, \"plan\": \"replying to email\"}\n\n"
+    "─── CALENDAR TOOLS ───\n"
+    "Search events: {\"calendar_search\": {\"query\": \"meeting\", \"max_results\": 10}, \"plan\": \"searching calendar\"}\n"
+    "List upcoming: {\"calendar_list\": {\"max_results\": 10}, \"plan\": \"listing upcoming events\"}\n"
+    "Create event: {\"calendar_create\": {\"summary\": \"Title\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}, \"plan\": \"creating event\"}\n\n"
+    "─── CODE TOOL ───\n"
+    "Pick files to read (max 8): {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
+    "If vague, return: {\"clarify\": \"question\", \"files_to_read\": [], \"plan\": \"\"}"
 )
 
 EDIT_PROMPT = (
@@ -105,10 +113,8 @@ def gh_file_tree(repo: str, branch: str, token: str) -> str:
         if item["type"] != "blob":
             continue
         path = item["path"]
-        # Skip heavy directories
         if any(path.startswith(d) or f"/{d}" in path for d in skip_dirs):
             continue
-        # Skip binary extensions
         ext = os.path.splitext(path)[1]
         if ext in skip_ext:
             continue
@@ -128,26 +134,18 @@ def gh_read_file(repo: str, path: str, branch: str, token: str) -> tuple[str, st
 
 
 def gh_commit_changes(repo: str, branch: str, token: str, changes: list[dict], message: str):
-    """
-    Commit multiple file changes in a single commit using GitHub Git Data API.
-    This is the proper way — creates one clean commit, not one per file.
-    
-    Steps: get ref → get commit → create blobs → create tree → create commit → update ref
-    """
+    """Commit multiple file changes in a single commit using GitHub Git Data API."""
     headers = _gh_headers(token)
     base = f"https://api.github.com/repos/{repo}"
 
-    # 1. Get current branch ref
     ref_resp = requests.get(f"{base}/git/refs/heads/{branch}", headers=headers, timeout=30)
     ref_resp.raise_for_status()
     current_sha = ref_resp.json()["object"]["sha"]
 
-    # 2. Get the commit to find the base tree
     commit_resp = requests.get(f"{base}/git/commits/{current_sha}", headers=headers, timeout=30)
     commit_resp.raise_for_status()
     base_tree_sha = commit_resp.json()["tree"]["sha"]
 
-    # 3. Create blobs for each changed file
     tree_items = []
     for change in changes:
         blob_resp = requests.post(f"{base}/git/blobs", headers=headers, timeout=30,
@@ -160,19 +158,16 @@ def gh_commit_changes(repo: str, branch: str, token: str, changes: list[dict], m
             "sha": blob_resp.json()["sha"],
         })
 
-    # 4. Create a new tree based on the current tree
     tree_resp = requests.post(f"{base}/git/trees", headers=headers, timeout=30,
         json={"base_tree": base_tree_sha, "tree": tree_items})
     tree_resp.raise_for_status()
     new_tree_sha = tree_resp.json()["sha"]
 
-    # 5. Create the commit
     commit_create = requests.post(f"{base}/git/commits", headers=headers, timeout=30,
         json={"message": message, "tree": new_tree_sha, "parents": [current_sha]})
     commit_create.raise_for_status()
     new_commit_sha = commit_create.json()["sha"]
 
-    # 6. Update the branch ref
     update_ref = requests.patch(f"{base}/git/refs/heads/{branch}", headers=headers, timeout=30,
         json={"sha": new_commit_sha})
     update_ref.raise_for_status()
@@ -187,7 +182,6 @@ def call_llm(messages: list[dict], temp: float = 0.1) -> str:
     api_key = os.getenv("DO_GENAI_API_KEY", os.getenv("GRADIENT_ACCESS_TOKEN", ""))
     model = os.getenv("DO_GENAI_MODEL", "gpt-4o-mini")
 
-    # Normalize endpoint URL for different providers
     base = endpoint.rstrip("/")
     if base.endswith("/v1"):
         url = f"{base}/chat/completions"
@@ -203,31 +197,6 @@ def call_llm(messages: list[dict], temp: float = 0.1) -> str:
         timeout=180)
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
-
-
-def exchange_for_service_token(refresh_token: str, connection: str = "google-oauth2") -> str:
-    """Exchange an Auth0 refresh token for a service-specific access token via Token Vault."""
-    domain = os.getenv("AUTH0_DOMAIN")
-    client_id = os.getenv("AUTH0_CLIENT_ID")
-    client_secret = os.getenv("AUTH0_CLIENT_SECRET")
-    
-    if not all([domain, client_id, client_secret, refresh_token]):
-        raise Exception("Missing Auth0 credentials or refresh token for exchange")
-
-    url = f"https://{domain}/oauth/token"
-    payload = {
-        "grant_type": "urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token",
-        "subject_token": refresh_token,
-        "subject_token_type": "urn:ietf:params:oauth:token-type:refresh_token",
-        "requested_token_type": "http://auth0.com/oauth/token-type/token-vault-access-token",
-        "connection": connection,
-        "client_id": client_id,
-        "client_secret": client_secret,
-    }
-
-    resp = requests.post(url, data=payload, headers={"Content-Type": "application/x-www-form-urlencoded"})
-    resp.raise_for_status()
-    return resp.json()["access_token"]
 
 
 def parse_json(text: str) -> dict:
@@ -262,6 +231,208 @@ def trigger_redeploy(do_app_id: str) -> bool:
 def sse(event_type: str, **data) -> str:
     return f"data: {json.dumps({'type': event_type, **data})}\n\n"
 
+# ── Gmail tool handlers ────────────────────────────────────────────────
+
+def handle_gmail_search(req, plan, hist):
+    """Search Gmail and summarize results."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected. Please connect your Google account in Settings first.")
+        yield sse("done")
+        return
+
+    query = plan["gmail_search"].get("query", "")
+    limit = plan["gmail_search"].get("max_results", 5)
+    yield sse("status", content=f"Searching Gmail for '{query}'...")
+    
+    try:
+        gmail = GmailService(req.googleAccessToken)
+        threads = gmail.search_threads(query, limit)
+        yield sse("status", content=f"Summarizing {len(threads)} email(s)...")
+        edit_raw = call_llm([
+            {"role": "system", "content": "You are a professional Gmail assistant. Summarize the following email threads concisely. Format with bullet points and bold important info."},
+            *hist,
+            {"role": "user", "content": f"Threads found:\n{json.dumps(threads, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", 
+            content=edit_raw,
+            actions=[{"label": "View in Gmail", "url": f"https://mail.google.com/mail/u/0/#search/{query.replace(' ', '+')}", "icon": "email", "tab": "gmail"}]
+        )
+    except Exception as e:
+        print(f"[Agent] Gmail Search Error: {e}")
+        yield sse("message", content=f"Sorry, I couldn't search your Gmail: {str(e)}")
+    yield sse("done")
+
+
+def handle_gmail_read(req, plan, hist):
+    """Read a specific email."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    msg_id = plan["gmail_read"].get("message_id", "")
+    yield sse("status", content="Reading email...")
+    
+    try:
+        gmail = GmailService(req.googleAccessToken)
+        message = gmail.get_message(msg_id)
+        yield sse("message", content=f"**{message['subject']}**\nFrom: {message['from']}\nDate: {message.get('date','')}\n\n{message['snippet']}")
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't read that email: {str(e)}")
+    yield sse("done")
+
+
+def handle_gmail_send(req, plan, hist):
+    """Send a new email."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    details = plan["gmail_send"]
+    to = details.get("to", "")
+    subject = details.get("subject", "")
+    body = details.get("body", "")
+    
+    yield sse("status", content=f"Sending email to {to}...")
+    
+    try:
+        gmail = GmailService(req.googleAccessToken)
+        result = gmail.send_message(to, subject, body)
+        msg_id = result.get("id", "")
+        # Construct a direct link to the sent message if possible
+        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{msg_id}" if msg_id else "https://mail.google.com/mail/u/0/#sent"
+        
+        yield sse("message", 
+            content=f"✅ Email sent successfully!\n\n**To:** {to}\n**Subject:** {subject}",
+            actions=[{"label": "View in Gmail", "url": gmail_url, "icon": "email", "tab": "gmail"}]
+        )
+    except Exception as e:
+        print(f"[Agent] Gmail Send Error: {e}")
+        yield sse("message", content=f"Sorry, I couldn't send that email: {str(e)}")
+    yield sse("done")
+
+
+def handle_gmail_reply(req, plan, hist):
+    """Reply to an email."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    msg_id = plan["gmail_reply"].get("message_id", "")
+    body = plan["gmail_reply"].get("body", "")
+    
+    yield sse("status", content="Sending reply...")
+    
+    try:
+        gmail = GmailService(req.googleAccessToken)
+        # Get the original message for context
+        original = gmail.get_message(msg_id)
+        # Send reply
+        result = gmail.send_message(
+            to=original["from"],
+            subject=f"Re: {original['subject']}",
+            body=body,
+            thread_id=msg_id,
+        )
+        new_id = result.get("id", "")
+        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{new_id}" if new_id else "https://mail.google.com/mail/u/0/#inbox"
+        
+        yield sse("message", 
+            content=f"✅ Reply sent to {original['from']}",
+            actions=[{"label": "View Conversation", "url": gmail_url, "icon": "email", "tab": "gmail"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't reply: {str(e)}")
+    yield sse("done")
+
+
+# ── Calendar tool handlers ─────────────────────────────────────────────
+
+def handle_calendar_search(req, plan, hist):
+    """Search calendar events."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    query = plan["calendar_search"].get("query", "")
+    yield sse("status", content=f"Checking your calendar for '{query}'...")
+    
+    try:
+        calendar = CalendarService(req.googleAccessToken)
+        events = calendar.search_events(query)
+        yield sse("status", content=f"Summarizing {len(events)} event(s)...")
+        edit_raw = call_llm([
+            {"role": "system", "content": "You are a professional Calendar assistant. Summarize the following calendar events concisely. Use bullet points and format dates nicely."},
+            *hist,
+            {"role": "user", "content": f"Events found:\n{json.dumps(events, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", 
+            content=edit_raw,
+            actions=[{"label": "Open Calendar", "url": f"https://calendar.google.com/calendar/u/0/r/search?q={query.replace(' ', '+')}", "icon": "calendar", "tab": "calendar"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't access your Calendar: {str(e)}")
+    yield sse("done")
+
+
+def handle_calendar_list(req, plan, hist):
+    """List upcoming events."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    max_results = plan["calendar_list"].get("max_results", 10)
+    yield sse("status", content="Fetching upcoming events...")
+    
+    try:
+        calendar = CalendarService(req.googleAccessToken)
+        events = calendar.list_events(max_results=max_results)
+        yield sse("status", content=f"Summarizing {len(events)} event(s)...")
+        edit_raw = call_llm([
+            {"role": "system", "content": "You are a professional Calendar assistant. Present the following upcoming events in a clear, organized format. Use bullet points and format dates nicely."},
+            *hist,
+            {"role": "user", "content": f"Upcoming events:\n{json.dumps(events, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", 
+            content=edit_raw,
+            actions=[{"label": "Open Calendar", "url": "https://calendar.google.com/calendar/u/0/r", "icon": "calendar", "tab": "calendar"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't access your Calendar: {str(e)}")
+    yield sse("done")
+
+
+def handle_calendar_create(req, plan, hist):
+    """Create a calendar event."""
+    if not req.googleAccessToken:
+        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("done")
+        return
+
+    details = plan["calendar_create"]
+    yield sse("status", content=f"Scheduling '{details.get('summary')}'...")
+    
+    try:
+        calendar = CalendarService(req.googleAccessToken)
+        event = calendar.create_event(
+            summary=details.get("summary"),
+            start_time=details.get("start_time"),
+            description=details.get("description", ""),
+        )
+        start = event.get("start", {}).get("dateTime", "")
+        yield sse("message", 
+            content=f"✅ Created: **{event.get('summary')}**\nScheduled for: {start}",
+            actions=[{"label": "View in Calendar", "url": event.get("htmlLink", ""), "icon": "calendar", "tab": "calendar"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't create that event: {str(e)}")
+    yield sse("done")
+
+
 # ── Main agent (yields SSE events) ─────────────────────────────────────
 
 def run_agent(req: AgentChatRequest):
@@ -285,6 +456,15 @@ def run_agent(req: AgentChatRequest):
             )
             yield sse("status", content=f"Processing {len(req.attachments)} uploaded file(s)...")
 
+        # Build context about available services
+        services_context = "\n\nAvailable services for this user:"
+        if req.googleAccessToken:
+            services_context += "\n- ✅ Gmail (connected) — can search, read, send emails"
+            services_context += "\n- ✅ Google Calendar (connected) — can search, list, create events"
+        else:
+            services_context += "\n- ❌ Gmail (not connected)"
+            services_context += "\n- ❌ Google Calendar (not connected)"
+
         # 1 ── Get file tree via GitHub API
         yield sse("status", content="Exploring codebase...")
         tree = gh_file_tree(repo, req.branch, req.githubToken)
@@ -298,7 +478,7 @@ def run_agent(req: AgentChatRequest):
         plan_raw = call_llm([
             {"role": "system", "content": PLAN_PROMPT},
             *hist,
-            {"role": "user", "content": f"Context: Today is {datetime.utcnow().strftime('%A, %Y-%m-%d %H:%M:%S UTC')}.\nFile tree:\n{tree}\n\nCurrent page: {req.currentPage}\nRequest: {req.message}{attachment_context}"},
+            {"role": "user", "content": f"Context: Today is {datetime.utcnow().strftime('%A, %Y-%m-%d %H:%M:%S UTC')}.{services_context}\nFile tree:\n{tree}\n\nCurrent page: {req.currentPage}\nRequest: {req.message}{attachment_context}"},
         ])
         print(f"[Agent] Plan: {plan_raw[:200]}")
         plan = parse_json(plan_raw)
@@ -309,79 +489,28 @@ def run_agent(req: AgentChatRequest):
             yield sse("done")
             return
 
-        # Handle Gmail Tool Call
+        # ── Route to service handlers ──
         if "gmail_search" in plan:
-            query = plan["gmail_search"].get("query", "")
-            limit = plan["gmail_search"].get("max_results", 5)
-            
-            yield sse("status", content=f"Searching Gmail for '{query}'...")
-            try:
-                # 1. Exchange for Google Access Token
-                g_token = exchange_for_service_token(req.auth0RefreshToken, "google-oauth2")
-                
-                # 2. Call Gmail Service
-                gmail = GmailService(g_token)
-                threads = gmail.search_threads(query, limit)
-                
-                yield sse("status", content=f"Summarizing {len(threads)} email(s)...")
-                
-                # 3. Present results to Edit Prompt for summary
-                edit_raw = call_llm([
-                    {"role": "system", "content": "You are a professional Gmail assistant. Summarize the following email threads concisely."},
-                    *hist,
-                    {"role": "user", "content": f"Threads found:\n{json.dumps(threads, indent=2)}\n\nUser request: {req.message}"},
-                ])
-                yield sse("message", content=edit_raw)
-                yield sse("done")
-                return
-            except Exception as e:
-                print(f"[Agent] Gmail Error: {e}")
-                yield sse("message", content=f"Sorry, I couldn't access your Gmail: {str(e)}")
-                yield sse("done")
-                return
-
-        # Handle Calendar Tools
+            yield from handle_gmail_search(req, plan, hist)
+            return
+        if "gmail_read" in plan:
+            yield from handle_gmail_read(req, plan, hist)
+            return
+        if "gmail_send" in plan:
+            yield from handle_gmail_send(req, plan, hist)
+            return
+        if "gmail_reply" in plan:
+            yield from handle_gmail_reply(req, plan, hist)
+            return
         if "calendar_search" in plan:
-            query = plan["calendar_search"].get("query", "")
-            yield sse("status", content=f"Checking your calendar for '{query}'...")
-            try:
-                g_token = exchange_for_service_token(req.auth0RefreshToken, "google-oauth2")
-                calendar = CalendarService(g_token)
-                events = calendar.search_events(query)
-                yield sse("status", content=f"Summarizing {len(events)} event(s)...")
-                edit_raw = call_llm([
-                    {"role": "system", "content": "You are a professional Calendar assistant. Summarize the following calendar events concisely."},
-                    *hist,
-                    {"role": "user", "content": f"Events found:\n{json.dumps(events, indent=2)}\n\nUser request: {req.message}"},
-                ])
-                yield sse("message", content=edit_raw)
-                yield sse("done")
-                return
-            except Exception as e:
-                print(f"[Agent] Calendar Error: {e}")
-                yield sse("message", content=f"Sorry, I couldn't access your Calendar: {str(e)}")
-                yield sse("done")
-                return
-
+            yield from handle_calendar_search(req, plan, hist)
+            return
+        if "calendar_list" in plan:
+            yield from handle_calendar_list(req, plan, hist)
+            return
         if "calendar_create" in plan:
-            details = plan["calendar_create"]
-            yield sse("status", content=f"Scheduling '{details.get('summary')}'...")
-            try:
-                g_token = exchange_for_service_token(req.auth0RefreshToken, "google-oauth2")
-                calendar = CalendarService(g_token)
-                event = calendar.create_event(
-                    summary=details.get("summary"),
-                    start_time=details.get("start_time"),
-                    description=details.get("description", "")
-                )
-                yield sse("message", content=f"✓ Created: **{event.get('summary')}**\nScheduled for: {event.get('start', {}).get('dateTime')}")
-                yield sse("done")
-                return
-            except Exception as e:
-                print(f"[Agent] Calendar Error: {e}")
-                yield sse("message", content=f"Sorry, I couldn't create that event: {str(e)}")
-                yield sse("done")
-                return
+            yield from handle_calendar_create(req, plan, hist)
+            return
 
         files_to_read = plan.get("files_to_read", [])[:8]
 
@@ -428,7 +557,6 @@ def run_agent(req: AgentChatRequest):
             fp = change["file"]
             if fp in file_contents:
                 change["originalContent"] = file_contents[fp]
-            # Ensure description exists
             if "description" not in change:
                 change["description"] = f"Updated {fp.split('/')[-1]}"
 
@@ -475,7 +603,6 @@ class ConfirmRequest(BaseModel):
 def confirm_changes(req: ConfirmRequest) -> dict:
     """Commit confirmed changes to GitHub."""
     repo = _parse_repo(req.githubUrl)
-    # Strip originalContent before committing (not needed for GitHub)
     clean_changes = [{"file": c["file"], "content": c["content"]} for c in req.changes]
     gh_commit_changes(
         repo=repo,

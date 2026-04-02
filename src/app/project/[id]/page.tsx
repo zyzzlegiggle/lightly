@@ -278,6 +278,7 @@ export default function WorkspacePage() {
             onToggle={() => setActiveTab(null)}
             onDeployTriggered={handleDeployTriggered}
             onChangesProposed={handleChangesProposed}
+            onTabChange={handleTabChange}
             currentPage={currentPath}
           />
         )}
