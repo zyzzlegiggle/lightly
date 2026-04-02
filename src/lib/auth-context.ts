@@ -15,6 +15,19 @@ export interface AuthContext {
   githubToken: string;
 }
 
+export type AuthContextResult =
+  | { ok: true; ctx: AuthContext }
+  | { ok: false; reason: "unauthenticated" | "github_not_linked" };
+
+/**
+ * Returns only the authenticated session user — does NOT require GitHub.
+ * Use this in routes that only need the user identity (e.g. for Slack/Gmail).
+ */
+export async function getSessionUser(): Promise<{ sub: string; name?: string; email?: string; picture?: string } | null> {
+  const session = await auth0.getSession();
+  return session?.user ?? null;
+}
+
 // Cache the management token (it lasts 24h)
 let cachedMgmtToken: { token: string; expiresAt: number } | null = null;
 
@@ -75,8 +88,18 @@ async function getGitHubTokenFromIdentity(userId: string): Promise<string | null
  * Returns null if not authenticated.
  */
 export async function getAuthContext(): Promise<AuthContext | null> {
+  const result = await getAuthContextResult();
+  if (!result.ok) return null;
+  return result.ctx;
+}
+
+/**
+ * Like getAuthContext but returns a typed result distinguishing
+ * unauthenticated vs github_not_linked, so callers can surface the right prompt.
+ */
+export async function getAuthContextResult(): Promise<AuthContextResult> {
   const session = await auth0.getSession();
-  if (!session?.user) return null;
+  if (!session?.user) return { ok: false, reason: "unauthenticated" };
 
   // Ensure the Auth0 user exists in the local DB (satisfies FK constraints)
   await ensureUserExists(session.user);
@@ -84,14 +107,17 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   const githubToken = await getGitHubTokenFromIdentity(session.user.sub);
 
   if (!githubToken) {
-    console.error("[AuthContext] No GitHub token found for user:", session.user.sub);
-    return null;
+    console.warn("[AuthContext] No GitHub token found for user:", session.user.sub);
+    return { ok: false, reason: "github_not_linked" };
   }
 
   return {
-    userId: session.user.sub,
-    userName: session.user.name || session.user.nickname || "User",
-    userImage: session.user.picture,
-    githubToken,
+    ok: true,
+    ctx: {
+      userId: session.user.sub,
+      userName: session.user.name || session.user.nickname || "User",
+      userImage: session.user.picture,
+      githubToken,
+    },
   };
 }

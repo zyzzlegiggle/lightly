@@ -36,8 +36,16 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
     try {
       setLoading(true);
       const res = await fetch("/api/repos");
-      if (res.status === 401 || res.status === 404) {
+      if (res.status === 401) {
         setError("github_not_linked");
+      } else if (res.status === 403) {
+        // Logged in but GitHub not connected
+        const data = await res.json();
+        if (data.error === "github_not_linked") {
+          setError("github_not_linked");
+        } else {
+          setError("Failed to fetch repos");
+        }
       } else if (!res.ok) {
         throw new Error("Failed to fetch repos");
       } else {
@@ -53,9 +61,9 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
   };
 
   const linkGithub = () => {
-    // Redirect to Auth0 login with GitHub connection
-    // Auth0 will handle the OAuth flow and store the token in Token Vault
-    window.location.href = "/api/auth/login?connection=github&returnTo=" + encodeURIComponent(window.location.href);
+    // Use Auth0 account linking — connects GitHub to the existing session
+    const returnTo = encodeURIComponent(window.location.pathname);
+    window.location.href = `/api/auth/connect?connection=github&returnTo=${returnTo}`;
   };
   
   const handleSelectRepo = async (repo: any) => {

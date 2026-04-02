@@ -1,13 +1,18 @@
-import { getAuthContext } from "@/lib/auth-context";
+import { getAuthContextResult } from "@/lib/auth-context";
 import { db } from "@/lib/db";
 import { project } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await getAuthContext();
-  if (!ctx) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const result = await getAuthContextResult();
+  if (!result.ok) {
+    return Response.json(
+      { error: result.reason === "github_not_linked" ? "github_not_linked" : "Unauthorized" },
+      { status: result.reason === "github_not_linked" ? 403 : 401 }
+    );
   }
+
+  const ctx = result.ctx;
 
   const { id } = await params;
 

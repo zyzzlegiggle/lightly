@@ -15,6 +15,7 @@ export default function SettingsPageClient({ session }: { session: any }) {
   const [slackWorkspaces, setSlackWorkspaces] = useState<SlackWorkspace[]>([]);
   const [loadingSlack, setLoadingSlack] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [githubLinked, setGithubLinked] = useState<boolean | null>(null); // null = loading
 
   useEffect(() => {
     fetch("/api/slack/workspaces")
@@ -22,6 +23,11 @@ export default function SettingsPageClient({ session }: { session: any }) {
       .then((data) => setSlackWorkspaces(data.workspaces || []))
       .catch(() => {})
       .finally(() => setLoadingSlack(false));
+
+    // Check if GitHub is linked by attempting to fetch repos
+    fetch("/api/repos")
+      .then((r) => setGithubLinked(r.status !== 401 && r.status !== 403))
+      .catch(() => setGithubLinked(false));
   }, []);
 
   const handleDisconnectSlack = async (id: string) => {
@@ -67,7 +73,18 @@ export default function SettingsPageClient({ session }: { session: any }) {
             <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Connected Accounts</h3>
             <div className="grid gap-3">
               {/* GitHub */}
-              {(session.user.sub?.includes("github") || session.user.identities?.some((id: any) => id.provider === "github")) ? (
+              {githubLinked === null ? (
+                // Loading skeleton
+                <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-200" />
+                    <div className="space-y-1">
+                      <div className="h-3 w-24 bg-zinc-200 rounded" />
+                      <div className="h-2.5 w-32 bg-zinc-100 rounded" />
+                    </div>
+                  </div>
+                </div>
+              ) : githubLinked ? (
                 <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center text-white">
@@ -90,16 +107,20 @@ export default function SettingsPageClient({ session }: { session: any }) {
                   className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:text-zinc-600 transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center group-hover:bg-zinc-200 transition-colors">
+                      <svg className="w-4 h-4 text-zinc-500 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12c0-5.523-4.477-10-10-10z" />
                       </svg>
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-zinc-400 group-hover:text-zinc-700 transition-colors">Connect GitHub</p>
-                      <p className="text-xs text-zinc-400">Not linked</p>
+                      <p className="text-sm font-bold text-zinc-500 group-hover:text-zinc-800 transition-colors">Connect GitHub</p>
+                      <p className="text-xs text-zinc-400">Required to create and manage projects</p>
                     </div>
                   </div>
+                  <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
+                    Connect
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                  </span>
                 </a>
               )}
 

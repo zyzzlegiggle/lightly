@@ -1,5 +1,4 @@
-import { auth0 } from "@/lib/auth0";
-import { getAuthContext } from "@/lib/auth-context";
+import { getAuthContextResult } from "@/lib/auth-context";
 
 // Frameworks we can actually run on the Droplet sandbox
 const SUPPORTED_FRAMEWORKS = ["next", "vite", "react-scripts", "nuxt", "svelte", "astro"];
@@ -39,13 +38,16 @@ function detectFramework(pkg: any): { framework: string | null; label: string; s
 }
 
 export async function GET() {
-  const ctx = await getAuthContext();
+  const result = await getAuthContextResult();
 
-  if (!ctx) {
+  if (!result.ok) {
+    if (result.reason === "github_not_linked") {
+      return Response.json({ error: "github_not_linked" }, { status: 403 });
+    }
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { githubToken } = ctx;
+  const { githubToken } = result.ctx;
 
   // Fetch repos from GitHub using the token from Token Vault
   try {
