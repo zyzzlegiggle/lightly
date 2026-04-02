@@ -10,6 +10,9 @@ import json
 import base64
 import requests
 from pydantic import BaseModel
+from gmail_service import GmailService
+from calendar_service import CalendarService
+from datetime import datetime
 
 # ── Models ──────────────────────────────────────────────────────────────
 
@@ -35,21 +38,27 @@ class AgentChatRequest(BaseModel):
     syncToken: str | None = None
     currentPage: str = "/"
     attachments: list[UploadedAttachment] = []
+    auth0RefreshToken: str | None = None
 
 # ── Prompts (kept short for token efficiency) ───────────────────────────
 
 PLAN_PROMPT = (
-    "You analyze a project file tree to plan code changes. "
-    "The user is a DESIGNER (non-technical), viewing a specific page of the app. "
-    "Prioritize files that render that page (routes, components, layouts). "
-    "Given the tree, current page, and request, pick files to read (max 8). "
-    "If the user attached images or design files, they are reference mockups "
-    "or UI inspiration — use them to guide your plan. "
-    "IMPORTANT: If the user's request is vague, ambiguous, or could mean multiple things, "
-    "DO NOT guess. Instead return: "
-    '{"clarify": "your friendly question to the user", "files_to_read": [], "plan": ""} '
-    "Ask a focused, simple question to understand their intent. "
-    'Otherwise return: {"files_to_read":["path"],"plan":"brief plan"}'
+    "You are an AI Workspace Assistant. You have three main capabilities:\n"
+    "1. **Code Editing**: Analyzing and modifying the project's source code.\n"
+    "2. **Gmail Services**: Searching, reading, and summarizing the user's emails.\n"
+    "3. **Calendar Services**: Searching, reading, and CREATING events in the user's Google Calendar.\n\n"
+    "Given the file tree, current page, and user request, determine the best course of action.\n"
+    "For GMAIL, use the `gmail_search` tool.\n"
+    'Return JSON: {"gmail_search": {"query": "search query", "max_results": 5}, "plan": "searching gmail"}\n\n'
+    "For CALENDAR SEARCH, use the `calendar_search` tool.\n"
+    'Return JSON: {"calendar_search": {"query": "meeting", "max_results": 10}, "plan": "searching calendar"}\n\n'
+    "For CALENDAR CREATE, use the `calendar_create` tool.\n"
+    "Provide start_time in ISO-8601 format (e.g., '2026-04-02T16:00:00Z').\n"
+    'Return JSON: {"calendar_create": {"summary": "Event Title", "start_time": "...", "description": "..."}, "plan": "creating event"}\n\n'
+    "For CODE, pick files to read (max 8).\n"
+    'Return JSON: {"files_to_read": ["path"], "plan": "brief plan"}\n\n'
+    "If vague, return "
+    '{"clarify": "question", "files_to_read": [], "plan": ""}'
 )
 
 EDIT_PROMPT = (
@@ -196,6 +205,31 @@ def call_llm(messages: list[dict], temp: float = 0.1) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
+def exchange_for_service_token(refresh_token: str, connection: str = "google-oauth2") -> str:
+    """Exchange an Auth0 refresh token for a service-specific access token via Token Vault."""
+    domain = os.getenv("AUTH0_DOMAIN")
+    client_id = os.getenv("AUTH0_CLIENT_ID")
+    client_secret = os.getenv("AUTH0_CLIENT_SECRET")
+    
+    if not all([domain, client_id, client_secret, refresh_token]):
+        raise Exception("Missing Auth0 credentials or refresh token for exchange")
+
+    url = f"https://{domain}/oauth/token"
+    payload = {
+        "grant_type": "urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token",
+        "subject_token": refresh_token,
+        "subject_token_type": "urn:ietf:params:oauth:token-type:refresh_token",
+        "requested_token_type": "http://auth0.com/oauth/token-type/token-vault-access-token",
+        "connection": connection,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+
+    resp = requests.post(url, data=payload, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
 def parse_json(text: str) -> dict:
     """Parse JSON from LLM response, handles markdown fences."""
     text = text.strip()
@@ -264,7 +298,7 @@ def run_agent(req: AgentChatRequest):
         plan_raw = call_llm([
             {"role": "system", "content": PLAN_PROMPT},
             *hist,
-            {"role": "user", "content": f"File tree:\n{tree}\n\nCurrent page: {req.currentPage}\nRequest: {req.message}{attachment_context}"},
+            {"role": "user", "content": f"Context: Today is {datetime.utcnow().strftime('%A, %Y-%m-%d %H:%M:%S UTC')}.\nFile tree:\n{tree}\n\nCurrent page: {req.currentPage}\nRequest: {req.message}{attachment_context}"},
         ])
         print(f"[Agent] Plan: {plan_raw[:200]}")
         plan = parse_json(plan_raw)
@@ -274,6 +308,80 @@ def run_agent(req: AgentChatRequest):
             yield sse("message", content=plan["clarify"])
             yield sse("done")
             return
+
+        # Handle Gmail Tool Call
+        if "gmail_search" in plan:
+            query = plan["gmail_search"].get("query", "")
+            limit = plan["gmail_search"].get("max_results", 5)
+            
+            yield sse("status", content=f"Searching Gmail for '{query}'...")
+            try:
+                # 1. Exchange for Google Access Token
+                g_token = exchange_for_service_token(req.auth0RefreshToken, "google-oauth2")
+                
+                # 2. Call Gmail Service
+                gmail = GmailService(g_token)
+                threads = gmail.search_threads(query, limit)
+                
+                yield sse("status", content=f"Summarizing {len(threads)} email(s)...")
+                
+                # 3. Present results to Edit Prompt for summary
+                edit_raw = call_llm([
+                    {"role": "system", "content": "You are a professional Gmail assistant. Summarize the following email threads concisely."},
+                    *hist,
+                    {"role": "user", "content": f"Threads found:\n{json.dumps(threads, indent=2)}\n\nUser request: {req.message}"},
+                ])
+                yield sse("message", content=edit_raw)
+                yield sse("done")
+                return
+            except Exception as e:
+                print(f"[Agent] Gmail Error: {e}")
+                yield sse("message", content=f"Sorry, I couldn't access your Gmail: {str(e)}")
+                yield sse("done")
+                return
+
+        # Handle Calendar Tools
+        if "calendar_search" in plan:
+            query = plan["calendar_search"].get("query", "")
+            yield sse("status", content=f"Checking your calendar for '{query}'...")
+            try:
+                g_token = exchange_for_service_token(req.auth0RefreshToken, "google-oauth2")
+                calendar = CalendarService(g_token)
+                events = calendar.search_events(query)
+                yield sse("status", content=f"Summarizing {len(events)} event(s)...")
+                edit_raw = call_llm([
+                    {"role": "system", "content": "You are a professional Calendar assistant. Summarize the following calendar events concisely."},
+                    *hist,
+                    {"role": "user", "content": f"Events found:\n{json.dumps(events, indent=2)}\n\nUser request: {req.message}"},
+                ])
+                yield sse("message", content=edit_raw)
+                yield sse("done")
+                return
+            except Exception as e:
+                print(f"[Agent] Calendar Error: {e}")
+                yield sse("message", content=f"Sorry, I couldn't access your Calendar: {str(e)}")
+                yield sse("done")
+                return
+
+        if "calendar_create" in plan:
+            details = plan["calendar_create"]
+            yield sse("status", content=f"Scheduling '{details.get('summary')}'...")
+            try:
+                g_token = exchange_for_service_token(req.auth0RefreshToken, "google-oauth2")
+                calendar = CalendarService(g_token)
+                event = calendar.create_event(
+                    summary=details.get("summary"),
+                    start_time=details.get("start_time"),
+                    description=details.get("description", "")
+                )
+                yield sse("message", content=f"✓ Created: **{event.get('summary')}**\nScheduled for: {event.get('start', {}).get('dateTime')}")
+                yield sse("done")
+                return
+            except Exception as e:
+                print(f"[Agent] Calendar Error: {e}")
+                yield sse("message", content=f"Sorry, I couldn't create that event: {str(e)}")
+                yield sse("done")
+                return
 
         files_to_read = plan.get("files_to_read", [])[:8]
 

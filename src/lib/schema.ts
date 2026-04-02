@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, jsonb, integer } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
 	id: text("id").primaryKey(),
@@ -65,4 +65,29 @@ export const project = pgTable("project", {
 	appSpecRaw: jsonb("appSpecRaw"),
 	createdAt: timestamp("createdAt").notNull().defaultNow(),
 	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export const workspaceNote = pgTable("workspaceNote", {
+	id: text("id").primaryKey(),
+	userId: text("userId")
+		.notNull()
+		.references(() => user.id),
+	title: text("title").notNull().default("Untitled"),
+	content: text("content").notNull().default(""),
+	createdAt: timestamp("createdAt").notNull().defaultNow(),
+	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export const workspaceEvent = pgTable("workspaceEvent", {
+	id: text("id").primaryKey(),
+	userId: text("userId")
+		.notNull()
+		.references(() => user.id),
+	title: text("title").notNull(),
+	description: text("description"),
+	startAt: timestamp("startAt").notNull(),
+	endAt: timestamp("endAt"),
+	allDay: boolean("allDay").notNull().default(false),
+	color: text("color").default("zinc"),
+	createdAt: timestamp("createdAt").notNull().defaultNow(),
 });

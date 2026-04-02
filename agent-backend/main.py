@@ -36,6 +36,7 @@ class SyncRequest(BaseModel):
     name: str
     githubToken: str
     envVars: list[EnvVar] = []
+    auth0RefreshToken: Optional[str] = None
 
 class ManualSyncRequest(BaseModel):
     dropletIp: str

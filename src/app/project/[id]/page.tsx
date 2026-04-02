@@ -5,6 +5,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChangesPanel, PendingChange } from "@/components/ChangesPanel";
+import { WorkspaceRail, WorkspaceTab } from "@/components/WorkspaceRail";
+import { NotionPanel } from "@/components/workspace/NotionPanel";
+import { CalendarPanel } from "@/components/workspace/CalendarPanel";
+import { GmailPanel } from "@/components/workspace/GmailPanel";
+import { SlackPanel } from "@/components/workspace/SlackPanel";
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -17,7 +22,7 @@ export default function WorkspacePage() {
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(searchParams.get("preview") || null);
   const [statusData, setStatusData] = useState<any>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab | null>("chat");
   const [iframeKey, setIframeKey] = useState(0);
   const [currentPath, setCurrentPath] = useState("/");
   const [pathInput, setPathInput] = useState("/");
@@ -35,6 +40,11 @@ export default function WorkspacePage() {
   // Full iframe src = base URL + current path
   const iframeSrc = previewUrl ? `${previewUrl.replace(/\/$/, "")}${currentPath}` : null;
 
+  // Toggle tab — clicking the active tab collapses the panel
+  const handleTabChange = useCallback((tab: WorkspaceTab) => {
+    setActiveTab((prev) => (prev === tab ? null : tab));
+  }, []);
+
   // ── Polling ──
   useEffect(() => {
     let active = true;
@@ -48,7 +58,6 @@ export default function WorkspacePage() {
         if (data.liveUrl) {
           setPreviewUrl(data.liveUrl);
         }
-        // Keep polling: fast while building, slow once active (to recover from crashes)
         const interval = data.phase === "ACTIVE" ? 30000 : 4000;
         if (active) setTimeout(poll, interval);
       } catch {
@@ -75,14 +84,13 @@ export default function WorkspacePage() {
     fetchProjects();
   }, []);
 
-  // ── Periodic health check via backend proxy (avoids CORS issues) ──
+  // ── Periodic health check ──
   useEffect(() => {
     if (!previewUrl || phase !== "ACTIVE") return;
     let active = true;
 
     const check = async () => {
       try {
-        // Use the status endpoint as a health proxy — it checks :8080/health on the Droplet
         const res = await fetch(`/api/projects/${projectId}/status`);
         if (!res.ok) throw new Error();
         const data = await res.json();
@@ -122,7 +130,6 @@ export default function WorkspacePage() {
     navigateToPath(pathInput);
   };
 
-  // Called when agent syncs files to Droplet — instant hot-reload
   const handleDeployTriggered = useCallback(() => {
     setIframeStatus("loading");
     setTimeout(() => {
@@ -132,7 +139,6 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Changes management ──
-
   const handleChangesProposed = useCallback((newChanges: any[]) => {
     const mapped: PendingChange[] = newChanges.map((ch: any, i: number) => ({
       id: `change-${Date.now()}-${i}`,
@@ -148,31 +154,24 @@ export default function WorkspacePage() {
   const handleDiscardChange = useCallback(async (changeId: string) => {
     const change = pendingChanges.find((c) => c.id === changeId);
     if (!change) return;
-
-    // If we have original content, revert on the Droplet
     if (change.originalContent) {
       setIsReverting(true);
       try {
         await fetch(`/api/projects/${projectId}/revert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            changes: [{ file: change.file, content: change.originalContent }],
-          }),
+          body: JSON.stringify({ changes: [{ file: change.file, content: change.originalContent }] }),
         });
-        // Refresh iframe to show reverted preview
         setIframeKey((k) => k + 1);
       } catch (err) {
         console.error("Failed to revert:", err);
       }
       setIsReverting(false);
     }
-
     setPendingChanges((prev) => prev.filter((c) => c.id !== changeId));
   }, [pendingChanges, projectId]);
 
   const handleDiscardAll = useCallback(async () => {
-    // Revert all changes with original content
     const revertable = pendingChanges.filter((c) => c.originalContent);
     if (revertable.length > 0) {
       setIsReverting(true);
@@ -180,9 +179,7 @@ export default function WorkspacePage() {
         await fetch(`/api/projects/${projectId}/revert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            changes: revertable.map((c) => ({ file: c.file, content: c.originalContent })),
-          }),
+          body: JSON.stringify({ changes: revertable.map((c) => ({ file: c.file, content: c.originalContent })) }),
         });
         setIframeKey((k) => k + 1);
       } catch (err) {
@@ -190,29 +187,22 @@ export default function WorkspacePage() {
       }
       setIsReverting(false);
     }
-
     setPendingChanges([]);
   }, [pendingChanges, projectId]);
 
   const handleConfirmAll = useCallback(async () => {
     if (pendingChanges.length === 0) return;
     setIsConfirming(true);
-
     try {
       const res = await fetch(`/api/projects/${projectId}/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          changes: pendingChanges.map((c) => ({
-            file: c.file,
-            content: c.content,
-          })),
+          changes: pendingChanges.map((c) => ({ file: c.file, content: c.content })),
           message: `Applied ${pendingChanges.length} design change${pendingChanges.length > 1 ? "s" : ""}`,
         }),
       });
-
       if (!res.ok) throw new Error("Failed to publish");
-
       setPendingChanges([]);
     } catch (err: any) {
       alert("Failed to publish changes: " + err.message);
@@ -223,12 +213,14 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-100 font-sans">
-      {/* Top nav */}
+      {/* ── Top nav ── */}
       <div className="h-12 bg-white border-b border-zinc-200 flex items-center px-4 gap-3 shrink-0 z-10">
         <Link href="/" className="flex items-center group/logo transition-all">
           <img src="/logo.png" alt="Lightly" className="h-6 object-contain transform group-hover/logo:scale-105 transition-transform" />
         </Link>
         <div className="w-px h-5 bg-zinc-200" />
+
+        {/* Project switcher */}
         <div className="relative group/switcher">
           <button
             onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
@@ -237,7 +229,7 @@ export default function WorkspacePage() {
             <span className="text-zinc-700 max-w-[150px] truncate">
               {statusData?.projectName || projects.find(p => p.id === projectId)?.githubUrl.split("/").pop()?.replace(".git", "") || "Loading..."}
             </span>
-            <svg className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isSwitcherOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isSwitcherOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
@@ -253,14 +245,10 @@ export default function WorkspacePage() {
                   {projects.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => {
-                        router.push(`/project/${p.id}`);
-                        setIsSwitcherOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex flex-col ${p.id === projectId
-                          ? 'bg-zinc-50 text-accent-primary font-medium'
-                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
-                        }`}
+                      onClick={() => { router.push(`/project/${p.id}`); setIsSwitcherOpen(false); }}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex flex-col ${
+                        p.id === projectId ? "bg-zinc-50 text-accent-primary font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                      }`}
                     >
                       <span className="truncate">{p.githubUrl.split("/").pop()?.replace(".git", "")}</span>
                       <span className="text-[10px] text-zinc-400 truncate">{p.githubUrl.replace("https://github.com/", "")}</span>
@@ -276,17 +264,27 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* Main layout: sidebar + preview */}
+      {/* ── Main layout ── */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Chat sidebar — now passes changes up */}
-        <ChatSidebar
-          projectId={projectId}
-          isCollapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed((c) => !c)}
-          onDeployTriggered={handleDeployTriggered}
-          onChangesProposed={handleChangesProposed}
-          currentPage={currentPath}
-        />
+
+        {/* Workspace rail — always visible */}
+        <WorkspaceRail activeTab={activeTab} onTabChange={handleTabChange} />
+
+        {/* ── Active workspace panel ── */}
+        {activeTab === "chat" && (
+          <ChatSidebar
+            projectId={projectId}
+            isCollapsed={false}
+            onToggle={() => setActiveTab(null)}
+            onDeployTriggered={handleDeployTriggered}
+            onChangesProposed={handleChangesProposed}
+            currentPage={currentPath}
+          />
+        )}
+        {activeTab === "gmail" && <GmailPanel />}
+        {activeTab === "calendar" && <CalendarPanel />}
+        {activeTab === "notion" && <NotionPanel />}
+        {activeTab === "slack" && <SlackPanel />}
 
         {/* Changes panel — floating top-right */}
         <ChangesPanel
@@ -298,19 +296,16 @@ export default function WorkspacePage() {
           isReverting={isReverting}
         />
 
-        {/* Browser preview */}
+        {/* ── Browser preview ── */}
         <div className="flex-1 overflow-hidden p-3 flex flex-col gap-0">
           <div className="w-full h-full rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden flex flex-col">
             {/* Browser chrome */}
             <div className="h-10 bg-zinc-50 border-b border-zinc-200 flex items-center px-3 gap-3 shrink-0">
-              {/* Dots */}
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-zinc-300 hover:bg-red-400 transition-colors" />
                 <div className="w-3 h-3 rounded-full bg-zinc-300 hover:bg-yellow-400 transition-colors" />
                 <div className="w-3 h-3 rounded-full bg-zinc-300 hover:bg-green-400 transition-colors" />
               </div>
-
-              {/* Nav arrows */}
               <div className="flex items-center gap-0.5 text-zinc-400">
                 <button
                   className="p-1 hover:bg-zinc-200 rounded transition-colors disabled:opacity-30"
@@ -328,8 +323,6 @@ export default function WorkspacePage() {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
               </div>
-
-              {/* URL bar */}
               <form onSubmit={handlePathSubmit} className="flex-1 flex items-center justify-center">
                 <div className="flex items-center gap-1.5 bg-white border border-zinc-200 rounded-lg px-3 py-1 min-w-[200px] max-w-md w-full shadow-inner focus-within:border-zinc-400 focus-within:ring-1 focus-within:ring-zinc-300 transition-all">
                   {phase === "ACTIVE" && previewUrl ? (
@@ -356,8 +349,6 @@ export default function WorkspacePage() {
                   )}
                 </div>
               </form>
-
-              {/* Actions */}
               <div className="flex items-center gap-1">
                 {phase === "ACTIVE" && previewUrl && (
                   <>
@@ -375,7 +366,6 @@ export default function WorkspacePage() {
             {/* Iframe area */}
             <div className="flex-1 overflow-hidden relative bg-white">
               {phase !== "ACTIVE" && !previewUrl ? (
-                /* ── Setup / building screen ── */
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-50/50">
                   <div className="relative mb-6">
                     <div className="w-16 h-16 border-[3px] border-zinc-200 rounded-full" />
@@ -397,8 +387,6 @@ export default function WorkspacePage() {
                     onLoad={() => setIframeStatus("ready")}
                     onError={() => { setIframeStatus("error"); setPreviewError("Failed to load preview"); }}
                   />
-
-                  {/* Loading indicator */}
                   {iframeStatus === "loading" && (
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-zinc-200 overflow-hidden">
                       <div className="h-full bg-accent-primary animate-pulse w-full" style={{ animation: "loading-bar 1.5s ease-in-out infinite" }} />
@@ -411,7 +399,6 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              {/* ── Error / status bar ── */}
               {phase === "ACTIVE" && previewError && (
                 <div className="absolute bottom-0 left-0 right-0 bg-amber-50 border-t border-amber-200 px-4 py-2 flex items-center gap-2">
                   <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

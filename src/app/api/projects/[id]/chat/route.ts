@@ -5,8 +5,9 @@ import { project } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth0.getSession();
   const ctx = await getAuthContext();
-  if (!ctx) {
+  if (!ctx || !session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -23,7 +24,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { message, history = [], currentPage = "/", attachments = [] } = await req.json();
   const spec = dbProject.appSpecRaw as any;
 
-  // Forward to FastAPI agent — GitHub token from Token Vault (short-lived, secure)
+  // The Auth0 session tokenSet contains the refresh_token (when offline_access scope is granted)
+  // This is used by the agent backend to call Token Vault for Gmail, Slack, Notion, etc.
+  const auth0RefreshToken = (session as any).tokenSet?.refresh_token ?? null;
+
+  if (!auth0RefreshToken) {
+    console.warn("[Chat] No refresh token in session — workspace service tools will be unavailable.");
+  }
+
+  // Forward to FastAPI agent
   const pyResp = await fetch("http://localhost:8000/api/agent/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -39,6 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       syncToken: spec?.syncToken || "",
       currentPage,
       attachments,
+      auth0RefreshToken,
     }),
   });
 
