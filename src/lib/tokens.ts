@@ -38,7 +38,19 @@ async function getManagementToken(): Promise<string> {
  * Checks both the Auth0 identities (for linked accounts) AND the local DB (for connected accounts).
  */
 export async function getServiceToken(userId: string, providerId: string): Promise<string | null> {
-  // 1. Check Auth0 Management API first (most reliable for primary/linked accounts)
+  // 1. Check local DB 'account' table first
+  // This is where we store tokens from our custom 'Connect' flow, which
+  // usually have the specific scopes (like gmail.modify) we need.
+  try {
+    const row = await db.query.account.findFirst({
+      where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
+    });
+    if (row?.accessToken) return row.accessToken;
+  } catch (e) {
+    console.error(`[Tokens] DB error for ${providerId}:`, e);
+  }
+
+  // 2. Fallback to Auth0 Management API (for primary/linked accounts)
   try {
     const domain = process.env.AUTH0_DOMAIN!;
     const mgmtToken = await getManagementToken();
@@ -54,16 +66,6 @@ export async function getServiceToken(userId: string, providerId: string): Promi
     }
   } catch (e) {
     console.error(`[Tokens] Auth0 Mgmt API error for ${providerId}:`, e);
-  }
-
-  // 2. Fallback to local DB 'account' table
-  try {
-    const row = await db.query.account.findFirst({
-      where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
-    });
-    if (row?.accessToken) return row.accessToken;
-  } catch (e) {
-    console.error(`[Tokens] DB error for ${providerId}:`, e);
   }
 
   return null;

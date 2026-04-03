@@ -107,21 +107,18 @@ export async function getAuthContextResult(): Promise<AuthContextResult> {
   // Ensure the Auth0 user exists in the local DB (satisfies FK constraints)
   await ensureUserExists(session.user);
 
-  let githubToken = await getGitHubTokenFromIdentity(session.user.sub);
+  // 1. Check local DB 'account' table first
+  const connections = await db.query.account.findMany({
+    where: eq(account.userId, session.user.sub),
+  });
+  let githubToken = connections.find(c => c.providerId === "github")?.accessToken || null;
 
-  // ── Fallback: Check local account table in DB ──
-  if (!githubToken) {
-    console.log(`[AuthContext] Management API did not yield GitHub token for ${session.user.sub}, checking local DB...`);
-    const connections = await db.query.account.findMany({
-      where: eq(account.userId, session.user.sub),
-    });
-    console.log(`[AuthContext] Found ${connections.length} connected service(s) in DB for ${session.user.sub}:`, connections.map(c => c.providerId));
-    
-    const localAccount = connections.find(c => c.providerId === "github");
-    githubToken = localAccount?.accessToken || null;
-    if (githubToken) {
-      console.log("[AuthContext] Found GitHub token in local account table for:", session.user.sub);
-    }
+  if (githubToken) {
+    console.log("[AuthContext] Found GitHub token in local account table for:", session.user.sub);
+  } else {
+    // 2. Fallback to Auth0 Management API
+    console.log(`[AuthContext] No local GitHub token, checking Auth0 Management API for ${session.user.sub}...`);
+    githubToken = await getGitHubTokenFromIdentity(session.user.sub);
   }
 
   if (!githubToken) {
