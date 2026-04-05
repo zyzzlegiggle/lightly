@@ -11,12 +11,9 @@ export async function DELETE() {
 
   const userId = session.user.sub;
   
-  // Delete all accounts for this user (Except the main one if we want to keep them logged in, 
-  // but usually "Logout All" means disconnect all linked services).
-  // The session itself remains until they "Sign Out".
-  
+  // Delete Google account record
   await db.delete(account)
-    .where(eq(account.userId, userId));
+    .where(and(eq(account.userId, userId), eq(account.providerId, "google-oauth2")));
 
   return Response.json({ success: true });
 }

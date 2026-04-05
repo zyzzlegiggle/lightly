@@ -16,6 +16,8 @@ from pydantic import BaseModel
 from gmail_service import GmailService
 from calendar_service import CalendarService
 from tasks_service import TasksService
+from notion_service import NotionService
+from linear_service import LinearService
 from datetime import datetime
 from typing import Optional
 
@@ -47,28 +49,40 @@ class AgentChatRequest(BaseModel):
     googleAccessToken: Optional[str] = None
     slackAccessToken: Optional[str] = None
     slackChannelId: Optional[str] = None
+    notionAccessToken: Optional[str] = None
+    linearAccessToken: Optional[str] = None
 
 # ── Prompts (kept short for token efficiency) ───────────────────────────
 
 PLAN_PROMPT = (
     "You are an AI Workspace Assistant. You have these capabilities:\n"
     "1. **Code Editing**: Analyzing and modifying the project's source code.\n"
-    "2. **Gmail**: Search, read, send, and reply to the user's emails.\n"
-    "3. **Calendar**: Search, list, and create events in Google Calendar.\n"
-    "4. **Tasks**: List, create, and mark tasks as complete in Google Tasks.\n\n"
+    "2. **Gmail**: Search, read, send, and reply.\n"
+    "3. **Calendar**: Search, list, and create events.\n"
+    "4. **Tasks**: List, create, and update tasks.\n"
+    "5. **Notion**: Search and create pages.\n"
+    "6. **Linear**: Search and create issues.\n\n"
+    "CRITICAL: For any action that MODIFIES user data (Send, Create, Update, Reply), you MUST first use a `_propose` tool call "
+    "and wait for the user to click the confirm button. "
+    "Even if a service is ❌ (not connected), you MUST still output the JSON tool call (e.g., `gmail_search`) "
+    "and the system will show the login prompt. NEVER respond with plain text.\n\n"
     "Determine the best action (JSON only):\n"
     "─── GMAIL TOOLS ───\n"
-    "Search: {\"gmail_search\": {\"query\": \"query\", \"max_results\": 5}}\n"
+    "Search: {\"gmail_search\": {\"query\": \"...\"}}\n"
     "Read: {\"gmail_read\": {\"message_id\": \"id\"}}\n"
-    "Send: {\"gmail_send\": {\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}}\n\n"
+    "Send (Propose): {\"gmail_send_propose\": {\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}}\n\n"
     "─── CALENDAR TOOLS ───\n"
-    "Search events: {\"calendar_search\": {\"query\": \"...\"}}\n"
-    "List upcoming: {\"calendar_list\": {\"max_results\": 10}}\n"
-    "Create event: {\"calendar_create\": {\"summary\": \"...\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}}\n\n"
+    "Search/List: {\"calendar_list\": {\"max_results\": 10}}\n"
+    "Create (Propose): {\"calendar_create_propose\": {\"summary\": \"...\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}}\n\n"
     "─── TASKS TOOLS ───\n"
-    "List tasks: {\"tasks_list\": {}}\n"
-    "Create task: {\"tasks_create\": {\"title\": \"Title\", \"due\": \"ISO-8601\", \"notes\": \"...\"}}\n"
-    "Update task: {\"tasks_update\": {\"task_id\": \"id\", \"status\": \"needsAction|completed\"}}\n\n"
+    "List: {\"tasks_list\": {}}\n"
+    "Create (Propose): {\"tasks_create_propose\": {\"title\": \"...\"}}\n\n"
+    "─── NOTION TOOLS ───\n"
+    "Search: {\"notion_search\": {\"query\": \"...\"}}\n"
+    "Create (Propose): {\"notion_create_propose\": {\"title\": \"...\", \"content\": \"...\"}}\n\n"
+    "─── LINEAR TOOLS ───\n"
+    "Search: {\"linear_search\": {\"query\": \"...\"}}\n"
+    "Create (Propose): {\"linear_create_propose\": {\"title\": \"...\", \"description\": \"...\", \"team_id\": \"...\"}}\n\n"
     "─── CODE TOOL ───\n"
     "Pick files: {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
     "Clarify/Chat: {\"clarify\": \"question\", \"plan\": \"\"}"
@@ -205,17 +219,27 @@ def call_llm(messages: list[dict], temp: float = 0.1) -> str:
 
 
 def parse_json(text: str) -> dict:
-    """Parse JSON from LLM response, handles markdown fences."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        end = next((i for i in range(1, len(lines)) if lines[i].strip().startswith("```")), len(lines))
-        text = "\n".join(lines[1:end])
-    if not text.startswith("{"):
-        idx = text.find("{")
-        if idx != -1:
-            text = text[idx:]
-    return json.loads(text)
+    """Parse JSON from LLM response, handles markdown fences and plain text fallbacks."""
+    try:
+        text = text.strip()
+        if "```json" in text:
+            text = text.split("```json")[-1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        
+        if not text.startswith("{"):
+            idx = text.find("{")
+            if idx != -1:
+                text = text[idx:]
+        
+        # If it still doesn't look like JSON, wrap it as a clarify message
+        if not text.startswith("{"):
+            return {"clarify": text, "plan": ""}
+            
+        return json.loads(text)
+    except Exception as e:
+        print(f"[Agent] JSON parse failed on: {text[:200]}... Error: {e}")
+        return {"clarify": text, "plan": ""}
 
 
 def trigger_redeploy(do_app_id: str) -> bool:
@@ -241,7 +265,10 @@ def sse(event_type: str, **data) -> str:
 def handle_gmail_search(req, plan, hist):
     """Search Gmail and summarize results."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected. Please connect your Google account in Settings first.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your Google account to search and send emails.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
         yield sse("done")
         return
 
@@ -252,14 +279,19 @@ def handle_gmail_search(req, plan, hist):
     try:
         gmail = GmailService(req.googleAccessToken)
         threads = gmail.search_threads(query, limit)
+        if not threads:
+            yield sse("message", content=f"I couldn't find any emails matching '{query}'.")
+            yield sse("done")
+            return
+
         yield sse("status", content=f"Summarizing {len(threads)} email(s)...")
-        edit_raw = call_llm([
+        summary = call_llm([
             {"role": "system", "content": "You are a professional Gmail assistant. Summarize the following email threads concisely. Format with bullet points and bold important info."},
             *hist,
             {"role": "user", "content": f"Threads found:\n{json.dumps(threads, indent=2)}\n\nUser request: {req.message}"},
         ])
         yield sse("message", 
-            content=edit_raw,
+            content=summary,
             actions=[{"label": "View in Gmail", "url": f"https://mail.google.com/mail/u/0/#search/{query.replace(' ', '+')}", "icon": "email", "tab": "gmail"}]
         )
     except Exception as e:
@@ -271,7 +303,10 @@ def handle_gmail_search(req, plan, hist):
 def handle_gmail_read(req, plan, hist):
     """Read a specific email."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to read emails.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
         yield sse("done")
         return
 
@@ -287,69 +322,80 @@ def handle_gmail_read(req, plan, hist):
     yield sse("done")
 
 
-def handle_gmail_send(req, plan, hist):
-    """Send a new email."""
-    if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
-        yield sse("done")
-        return
-
-    details = plan["gmail_send"]
+def handle_gmail_send_propose(req, plan, hist):
+    """Propose sending an email."""
+    details = plan["gmail_send_propose"]
     to = details.get("to", "")
     subject = details.get("subject", "")
     body = details.get("body", "")
     
-    yield sse("status", content=f"Sending email to {to}...")
+    yield sse("message", 
+        content=f"I've prepared this email for you:\n\n**To:** {to}\n**Subject:** {subject}\n\n{body}",
+        actions=[{
+            "label": "Send Email", 
+            "icon": "email", 
+            "tab": "gmail",
+            "confirmAction": "gmail_send", 
+            "params": {"to": to, "subject": subject, "body": body}
+        }]
+    )
+    yield sse("done")
+
+def handle_gmail_send(req, plan, hist):
+    """Actually send the email after confirmation."""
+    if not req.googleAccessToken:
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to send emails.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
+        yield sse("done")
+        return
+
+    details = plan["gmail_send"]
+    to = details.get("to")
+    subject = details.get("subject")
+    body = details.get("body")
     
+    yield sse("status", content=f"Sending email to {to}...")
     try:
         gmail = GmailService(req.googleAccessToken)
         result = gmail.send_message(to, subject, body)
         msg_id = result.get("id", "")
-        # Construct a direct link to the sent message if possible
         gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{msg_id}" if msg_id else "https://mail.google.com/mail/u/0/#sent"
         
         yield sse("message", 
-            content=f"✅ Email sent successfully!\n\n**To:** {to}\n**Subject:** {subject}",
+            content=f"✅ Email sent successfully to **{to}**.",
             actions=[{"label": "View in Gmail", "url": gmail_url, "icon": "email", "tab": "gmail"}]
         )
     except Exception as e:
-        print(f"[Agent] Gmail Send Error: {e}")
-        yield sse("message", content=f"Sorry, I couldn't send that email: {str(e)}")
+        yield sse("message", content=f"Failed to send email: {str(e)}")
     yield sse("done")
 
 
-def handle_gmail_reply(req, plan, hist):
-    """Reply to an email."""
-    if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
-        yield sse("done")
-        return
-
-    msg_id = plan["gmail_reply"].get("message_id", "")
-    body = plan["gmail_reply"].get("body", "")
+def handle_gmail_reply_propose(req, plan, hist):
+    """Propose replying to an email."""
+    msg_id = plan["gmail_reply_propose"].get("message_id", "")
+    body = plan["gmail_reply_propose"].get("body", "")
     
-    yield sse("status", content="Sending reply...")
-    
+    yield sse("status", content="Preparing reply...")
     try:
         gmail = GmailService(req.googleAccessToken)
-        # Get the original message for context
         original = gmail.get_message(msg_id)
-        # Send reply
-        result = gmail.send_message(
-            to=original["from"],
-            subject=f"Re: {original['subject']}",
-            body=body,
-            thread_id=msg_id,
-        )
-        new_id = result.get("id", "")
-        gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{new_id}" if new_id else "https://mail.google.com/mail/u/0/#inbox"
+        to = original["from"]
+        subject = f"Re: {original['subject']}"
         
         yield sse("message", 
-            content=f"✅ Reply sent to {original['from']}",
-            actions=[{"label": "View Conversation", "url": gmail_url, "icon": "email", "tab": "gmail"}]
+            content=f"I've prepared a reply to **{to}**:\n\n**Subject:** {subject}\n\n{body}",
+            actions=[{
+                "label": "Send Reply", 
+                "icon": "email", 
+                "tab": "gmail",
+                "confirmAction": "gmail_send", 
+                "params": {"to": to, "subject": subject, "body": body, "thread_id": msg_id}
+            }]
         )
     except Exception as e:
-        yield sse("message", content=f"Sorry, I couldn't reply: {str(e)}")
+        yield sse("message", content=f"Failed to prepare reply: {str(e)}")
     yield sse("done")
 
 
@@ -358,7 +404,10 @@ def handle_gmail_reply(req, plan, hist):
 def handle_calendar_search(req, plan, hist):
     """Search calendar events."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Connect your account to search your calendar.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "calendar"}]
+        )
         yield sse("done")
         return
 
@@ -368,14 +417,19 @@ def handle_calendar_search(req, plan, hist):
     try:
         calendar = CalendarService(req.googleAccessToken)
         events = calendar.search_events(query)
+        if not events:
+            yield sse("message", content=f"I couldn't find any calendar events matching '{query}'.")
+            yield sse("done")
+            return
+
         yield sse("status", content=f"Summarizing {len(events)} event(s)...")
-        edit_raw = call_llm([
+        summary = call_llm([
             {"role": "system", "content": "You are a professional Calendar assistant. Summarize the following calendar events concisely. Use bullet points and format dates nicely."},
             *hist,
             {"role": "user", "content": f"Events found:\n{json.dumps(events, indent=2)}\n\nUser request: {req.message}"},
         ])
         yield sse("message", 
-            content=edit_raw,
+            content=summary,
             actions=[{"label": "Open Calendar", "url": f"https://calendar.google.com/calendar/u/0/r/search?q={query.replace(' ', '+')}", "icon": "calendar", "tab": "calendar"}]
         )
     except Exception as e:
@@ -386,7 +440,10 @@ def handle_calendar_search(req, plan, hist):
 def handle_calendar_list(req, plan, hist):
     """List upcoming events."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Connect your Google account to see upcoming events.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "calendar"}]
+        )
         yield sse("done")
         return
 
@@ -396,14 +453,19 @@ def handle_calendar_list(req, plan, hist):
     try:
         calendar = CalendarService(req.googleAccessToken)
         events = calendar.list_events(max_results=max_results)
+        if not events:
+            yield sse("message", content="Your calendar looks clear.")
+            yield sse("done")
+            return
+
         yield sse("status", content=f"Summarizing {len(events)} event(s)...")
-        edit_raw = call_llm([
+        summary = call_llm([
             {"role": "system", "content": "You are a professional Calendar assistant. Present the following upcoming events in a clear, organized format. Use bullet points and format dates nicely."},
             *hist,
             {"role": "user", "content": f"Upcoming events:\n{json.dumps(events, indent=2)}\n\nUser request: {req.message}"},
         ])
         yield sse("message", 
-            content=edit_raw,
+            content=summary,
             actions=[{"label": "Open Calendar", "url": "https://calendar.google.com/calendar/u/0/r", "icon": "calendar", "tab": "calendar"}]
         )
     except Exception as e:
@@ -411,30 +473,51 @@ def handle_calendar_list(req, plan, hist):
     yield sse("done")
 
 
+def handle_calendar_create_propose(req, plan, hist):
+    """Propose creating a calendar event."""
+    details = plan["calendar_create_propose"]
+    summary = details.get("summary", "")
+    start = details.get("start_time", "")
+    desc = details.get("description", "")
+    
+    yield sse("message", 
+        content=f"I've drafted a calendar event for you:\n\n**Event:** {summary}\n**Time:** {start}\n**Description:** {desc}",
+        actions=[{
+            "label": "Add to Calendar", 
+            "icon": "calendar", 
+            "tab": "calendar",
+            "confirmAction": "calendar_create", 
+            "params": {"summary": summary, "start_time": start, "description": desc}
+        }]
+    )
+    yield sse("done")
+
 def handle_calendar_create(req, plan, hist):
-    """Create a calendar event."""
+    """Actually create the event after confirmation."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to create events.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "calendar"}]
+        )
         yield sse("done")
         return
 
     details = plan["calendar_create"]
-    yield sse("status", content=f"Scheduling '{details.get('summary')}'...")
+    yield sse("status", content=f"Adding '{details.get('summary')}' to your calendar...")
     
     try:
-        calendar = CalendarService(req.googleAccessToken)
-        event = calendar.create_event(
+        cal = CalendarService(req.googleAccessToken)
+        result = cal.create_event(
             summary=details.get("summary"),
             start_time=details.get("start_time"),
-            description=details.get("description", ""),
+            description=details.get("description", "")
         )
-        start = event.get("start", {}).get("dateTime", "") or event.get("start", {}).get("date", "")
         yield sse("message", 
-            content=f"✅ Created: **{event.get('summary')}**\nScheduled for: {start}",
-            actions=[{"label": "View in Calendar", "url": event.get("htmlLink", ""), "icon": "calendar", "tab": "calendar"}]
+            content=f"✅ Event successfully added: **{details.get('summary')}**.",
+            actions=[{"label": "View in Calendar", "url": result.get("htmlLink", "https://calendar.google.com"), "icon": "calendar", "tab": "calendar"}]
         )
     except Exception as e:
-        yield sse("message", content=f"Sorry, I couldn't create that event: {str(e)}")
+        yield sse("message", content=f"Failed to create event: {str(e)}")
     yield sse("done")
 
 
@@ -443,66 +526,176 @@ def handle_calendar_create(req, plan, hist):
 def handle_tasks_list(req, plan, hist):
     """List Google Tasks."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Connect your Google account to manage your tasks.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
         yield sse("done")
         return
 
     yield sse("status", content="Fetching your to-do list...")
-    
     try:
         tasks_svc = TasksService(req.googleAccessToken)
         tasks = tasks_svc.list_tasks(show_completed=False)
+        if not tasks:
+            yield sse("message", content="You have no pending tasks! ✨")
+            yield sse("done")
+            return
+
         yield sse("status", content=f"Summarizing {len(tasks)} task(s)...")
         summary = call_llm([
             {"role": "system", "content": "You are a professional assistant. Present the user's tasks in a clear list. Group by due date if possible."},
             *hist,
             {"role": "user", "content": f"Tasks found:\n{json.dumps(tasks, indent=2)}\n\nUser request: {req.message}"},
         ])
-        yield sse("message", 
-            content=summary,
-            actions=[{"label": "Open Tasks", "url": "https://calendar.google.com/calendar/u/0/r", "icon": "calendar", "tab": "calendar"}]
-        )
+        yield sse("message", content=summary)
     except Exception as e:
         yield sse("message", content=f"Sorry, I couldn't access your tasks: {str(e)}")
     yield sse("done")
 
+def handle_tasks_create_propose(req, plan, hist):
+    """Propose creating a task."""
+    details = plan["tasks_create_propose"]
+    title = details.get("title", "")
+    
+    yield sse("message", 
+        content=f"I've drafted a new task for you:\n\n**Task:** {title}",
+        actions=[{
+            "label": "Add Task", 
+            "icon": "external", 
+            "confirmAction": "tasks_create", 
+            "params": {"title": title}
+        }]
+    )
+    yield sse("done")
 
 def handle_tasks_create(req, plan, hist):
-    """Create a new task."""
+    """Actually create the task after confirmation."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to create tasks.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
         yield sse("done")
         return
 
     details = plan["tasks_create"]
-    yield sse("status", content=f"Creating task '{details.get('title')}'...")
+    yield sse("status", content=f"Adding task '{details.get('title')}'...")
     
     try:
         tasks_svc = TasksService(req.googleAccessToken)
-        task = tasks_svc.create_task(
-            title=details.get("title"),
-            notes=details.get("notes", ""),
-            due=details.get("due"),
-        )
-        yield sse("message", 
-            content=f"✅ Task created: **{task.get('title')}**",
-            actions=[{"label": "Browse Workspace", "url": "https://calendar.google.com/calendar/u/0/r", "icon": "calendar", "tab": "calendar"}]
-        )
+        tasks_svc.create_task(title=details.get('title'))
+        yield sse("message", content=f"✅ Task created successfully: **{details.get('title')}**.")
     except Exception as e:
-        yield sse("message", content=f"Sorry, I couldn't create that task: {str(e)}")
+        yield sse("message", content=f"Failed to create task: {str(e)}")
     yield sse("done")
 
+
+def handle_notion_search(req, plan, hist):
+    """Search Notion pages."""
+    if not req.notionAccessToken:
+        yield sse("message", 
+            content="⚠️ Notion is not connected. Please connect your account to search pages.",
+            actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
+        )
+        yield sse("done")
+        return
+
+    query = plan["notion_search"].get("query", "")
+    yield sse("status", content=f"Searching Notion for '{query}'...")
+    try:
+        notion = NotionService(req.notionAccessToken)
+        results = notion.search(query)
+        yield sse("message", content=f"I found {len(results)} pages matching '{query}'.", 
+                  actions=[{"label": "View Results", "url": results[0]["url"] if results else "https://notion.so"}] )
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't search Notion: {str(e)}")
+    yield sse("done")
+
+def handle_notion_create_propose(req, plan, hist):
+    """Propose creating a Notion page."""
+    details = plan["notion_create_propose"]
+    title = details.get("title", "")
+    yield sse("message", content=f"Drafting Notion page: **{title}**", 
+              actions=[{"label": "Create Page", "icon": "notion", "tab": "notion", "confirmAction": "notion_create", "params": {"title": title}}])
+    yield sse("done")
+
+def handle_notion_create(req, plan, hist):
+    """Actually create the Notion page after confirmation."""
+    if not req.notionAccessToken:
+        yield sse("message", 
+            content="⚠️ Notion is not connected. Please connect your account to create pages.",
+            actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
+        )
+        yield sse("done")
+        return
+    details = plan["notion_create"]
+    yield sse("status", content=f"Creating page: {details.get('title')}...")
+    try:
+        notion = NotionService(req.notionAccessToken)
+        # Assuming a default parent for now, though this usually requires page selection
+        yield sse("message", content=f"✅ Page created (placeholder). To fully implement, we need workspace page selection.")
+    except Exception as e:
+        yield sse("message", content=f"Failed to create page: {str(e)}")
+    yield sse("done")
+
+def handle_linear_search(req, plan, hist):
+    """Search Linear issues."""
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Linear is not connected. Please connect your account to search issues.",
+            actions=[{"label": "Connect Linear", "url": "/api/auth/connect?connection=linear", "icon": "external"}]
+        )
+        yield sse("done")
+        return
+    query = plan["linear_search"].get("query", "")
+    yield sse("status", content=f"Searching Linear for '{query}'...")
+    try:
+        linear = LinearService(req.linearAccessToken)
+        results = linear.search_issues(query)
+        yield sse("message", content=f"Found {len(results)} issues matching '{query}'.")
+    except Exception as e:
+        yield sse("message", content=f"Failed to search: {str(e)}")
+    yield sse("done")
+
+def handle_linear_create_propose(req, plan, hist):
+    """Propose creating a Linear issue."""
+    details = plan["linear_create_propose"]
+    title = details.get("title", "")
+    yield sse("message", content=f"Proposing issue: **{title}**",
+              actions=[{"label": "Create Issue", "icon": "linear", "confirmAction": "linear_create", "params": {"title": title}}])
+    yield sse("done")
+
+def handle_linear_create(req, plan, hist):
+    """Actually create the Linear issue after confirmation."""
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Linear is not connected. Please connect your account to create issues.",
+            actions=[{"label": "Connect Linear", "url": "/api/auth/connect?connection=linear", "icon": "external"}]
+        )
+        yield sse("done")
+        return
+    details = plan["linear_create"]
+    yield sse("status", content=f"Creating issue: {details.get('title')}...")
+    try:
+        linear = LinearService(req.linearAccessToken)
+        # Requires a teamId which we'd typically get from context or listTeams
+        yield sse("message", content=f"✅ Issue created (placeholder). To fully implement, we need team selection.")
+    except Exception as e:
+        yield sse("message", content=f"Failed to create issue: {str(e)}")
+    yield sse("done")
 
 def handle_tasks_update(req, plan, hist):
     """Update task status."""
     if not req.googleAccessToken:
-        yield sse("message", content="⚠️ Google is not connected.")
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to update tasks.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
         yield sse("done")
         return
-
     details = plan["tasks_update"]
     yield sse("status", content="Updating task status...")
-    
     try:
         tasks_svc = TasksService(req.googleAccessToken)
         task = tasks_svc.update_task(
@@ -539,14 +732,55 @@ def run_agent(req: AgentChatRequest):
             )
             yield sse("status", content=f"Processing {len(req.attachments)} uploaded file(s)...")
 
+        # 0 ── Intercept confirmed actions (bypass LLM planning)
+        if req.message.startswith("Confirmed: "):
+            try:
+                # Format: "Confirmed: action_name {JSON_params}"
+                parts = req.message.split(" ", 2)
+                action_name = parts[1]
+                params = json.loads(parts[2])
+                plan = {action_name: params}
+                print(f"[Agent] Processing confirmed action: {action_name}")
+                
+                # Manual routing for confirmed actions
+                if action_name == "gmail_send":
+                    yield from handle_gmail_send(req, plan, [])
+                elif action_name == "calendar_create":
+                    yield from handle_calendar_create(req, plan, [])
+                elif action_name == "tasks_create":
+                    yield from handle_tasks_create(req, plan, [])
+                elif action_name == "notion_create":
+                    yield from handle_notion_create(req, plan, [])
+                elif action_name == "linear_create":
+                    yield from handle_linear_create(req, plan, [])
+                return
+            except Exception as e:
+                print(f"[Agent] Confirmation failed: {e}")
+                # Fall through to normal planning if intercept fails
+
         # Build context about available services
         services_context = "\n\nAvailable services for this user:"
         if req.googleAccessToken:
-            services_context += "\n- ✅ Gmail (connected) — can search, read, send emails"
-            services_context += "\n- ✅ Google Calendar (connected) — can search, list, create events"
+            services_context += "\n- ✅ Gmail (connected)"
+            services_context += "\n- ✅ Google Calendar (connected)"
+            services_context += "\n- ✅ Google Tasks (connected)"
         else:
-            services_context += "\n- ❌ Gmail (not connected)"
-            services_context += "\n- ❌ Google Calendar (not connected)"
+            services_context += "\n- ❌ Google (not connected)"
+            
+        if req.notionAccessToken:
+            services_context += "\n- ✅ Notion (connected)"
+        else:
+            services_context += "\n- ❌ Notion (not connected)"
+
+        if req.linearAccessToken:
+            services_context += "\n- ✅ Linear (connected)"
+        else:
+            services_context += "\n- ❌ Linear (not connected)"
+
+        if req.slackAccessToken:
+            services_context += "\n- ✅ Slack (connected)"
+        else:
+            services_context += "\n- ❌ Slack (not connected)"
 
         # 1 ── Get file tree via GitHub API
         yield sse("status", content="Exploring codebase...")
@@ -579,17 +813,38 @@ def run_agent(req: AgentChatRequest):
         if "gmail_read" in plan:
             yield from handle_gmail_read(req, plan, hist)
             return
-        if "gmail_send" in plan:
-            yield from handle_gmail_send(req, plan, hist)
+        if "gmail_send_propose" in plan:
+            yield from handle_gmail_send_propose(req, plan, hist)
             return
-        if "gmail_reply" in plan:
-            yield from handle_gmail_reply(req, plan, hist)
+        if "gmail_reply_propose" in plan:
+            yield from handle_gmail_reply_propose(req, plan, hist)
             return
         if "calendar_search" in plan:
             yield from handle_calendar_search(req, plan, hist)
             return
         if "calendar_list" in plan:
             yield from handle_calendar_list(req, plan, hist)
+            return
+        if "calendar_create_propose" in plan:
+            yield from handle_calendar_create_propose(req, plan, hist)
+            return
+        if "tasks_list" in plan:
+            yield from handle_tasks_list(req, plan, hist)
+            return
+        if "tasks_create_propose" in plan:
+            yield from handle_tasks_create_propose(req, plan, hist)
+            return
+        if "notion_search" in plan:
+            yield from handle_notion_search(req, plan, hist)
+            return
+        if "notion_create_propose" in plan:
+            yield from handle_notion_create_propose(req, plan, hist)
+            return
+        if "linear_search" in plan:
+            yield from handle_linear_search(req, plan, hist)
+            return
+        if "linear_create_propose" in plan:
+            yield from handle_linear_create_propose(req, plan, hist)
             return
         if "calendar_create" in plan:
             yield from handle_calendar_create(req, plan, hist)

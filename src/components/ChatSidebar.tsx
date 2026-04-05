@@ -4,12 +4,21 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+interface ChatAction {
+  label: string;
+  url?: string;
+  icon?: "calendar" | "email" | "external" | "notion" | "linear";
+  tab?: string;
+  confirmAction?: string;
+  params?: any;
+}
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "status";
   content: string;
   changesDescription?: string[];
-  actions?: { label: string; url: string; icon?: "calendar" | "email" | "external"; tab?: string }[];
+  actions?: ChatAction[];
   timestamp: number;
   attachments?: UploadedFile[];
 }
@@ -229,8 +238,8 @@ export function ChatSidebar({
 
   // ── Send message ──
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (overrideText?: string) => {
+    const text = (overrideText || input).trim();
     if ((!text && pendingFiles.length === 0) || isLoading) return;
 
     const attachments = [...pendingFiles];
@@ -487,10 +496,21 @@ export function ChatSidebar({
                                   <button
                                     key={i}
                                     onClick={(e) => {
-                                      if (action.tab && onTabChange) {
+                                      if (action.confirmAction) {
+                                        e.preventDefault();
+                                        // Execute confirmed action
+                                        const confirmMsg = `Confirmed: ${action.confirmAction} ${JSON.stringify(action.params)}`;
+                                        sendMessage(confirmMsg);
+                                        
+                                        if (action.tab && onTabChange) {
+                                          onTabChange(action.tab);
+                                          // Trigger highlight via window event or ref if shared
+                                          window.dispatchEvent(new CustomEvent("highlight-tab", { detail: { tab: action.tab } }));
+                                        }
+                                      } else if (action.tab && onTabChange) {
                                         e.preventDefault();
                                         onTabChange(action.tab);
-                                      } else {
+                                      } else if (action.url) {
                                         window.open(action.url, "_blank");
                                       }
                                     }}
@@ -666,7 +686,7 @@ export function ChatSidebar({
 
             {/* Send button */}
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={(!input.trim() && pendingFiles.length === 0) || isLoading}
               className="p-2 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white rounded-lg hover:opacity-90 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-sm"
             >

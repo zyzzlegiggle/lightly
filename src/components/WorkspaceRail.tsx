@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 export type WorkspaceTab = "chat" | "gmail" | "calendar" | "notion" | "slack";
 
 interface WorkspaceRailProps {
@@ -56,17 +58,34 @@ const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
+  const [highlightedTab, setHighlightedTab] = useState<WorkspaceTab | null>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      const tab = e.detail?.tab;
+      if (tab) {
+        setHighlightedTab(tab);
+        setTimeout(() => setHighlightedTab(null), 2000);
+      }
+    };
+    window.addEventListener("highlight-tab", handler);
+    return () => window.removeEventListener("highlight-tab", handler);
+  }, []);
+
   return (
     <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 pb-4 gap-1 shrink-0">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
+        const isHighlighted = highlightedTab === tab.id;
         return (
           <div key={tab.id} className="relative group">
             <button
               onClick={() => onTabChange(tab.id)}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-150 ${
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
                 isActive
                   ? "bg-zinc-900 text-white shadow-sm"
+                  : isHighlighted
+                  ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
                   : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
               }`}
               aria-label={tab.label}

@@ -36,7 +36,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
 
   const googleAccount = connectedAccounts.find((a) => a.providerId === "google-oauth2");
-  const slackAccounts = connectedAccounts.filter((a) => a.providerId === "slack");
+  const slackAccount = connectedAccounts.find((a) => a.providerId === "slack");
+  const notionAccount = connectedAccounts.find((a) => a.providerId === "notion");
+  const linearAccount = connectedAccounts.find((a) => a.providerId === "linear");
 
   // Forward to FastAPI agent
   const pyResp = await fetch("http://localhost:8000/api/agent/chat", {
@@ -56,8 +58,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       attachments,
       // Pass service tokens directly — no more Token Vault round-trip
       googleAccessToken: googleAccount?.accessToken || null,
-      slackAccessToken: slackAccounts[0]?.accessToken || null,
+      slackAccessToken: slackAccount?.accessToken || null,
       slackChannelId: dbProject.slackChannelId || null,
+      notionAccessToken: notionAccount?.accessToken || null,
+      linearAccessToken: linearAccount?.accessToken || null,
     }),
   });
 

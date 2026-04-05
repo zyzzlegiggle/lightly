@@ -24,7 +24,9 @@ function extractBody(payload: any): string {
   }
   if (payload.mimeType === "text/plain" || payload.mimeType === "text/html") {
     if (payload.body?.data) {
-      return Buffer.from(payload.body.data, "base64").toString("utf-8");
+      // Use base64url safe decoding
+      const data = payload.body.data.replace(/-/g, "+").replace(/_/g, "/");
+      return Buffer.from(data, "base64").toString("utf-8");
     }
   }
   return "";
