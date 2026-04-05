@@ -663,8 +663,20 @@ def handle_linear_create_propose(req, plan, hist):
 
 def handle_linear_create(req, plan, hist):
     """Actually create the Linear issue."""
-    if not req.linearAccessToken or not req.linearTeamId:
-        yield sse("message", content="⚠️ Linear is not properly configured for this project. Please connect Linear in settings.")
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Your Linear account is not connected. Please connect to continue.",
+            actions=[{
+                "label": "Connect Linear", 
+                "icon": "linear", 
+                "url": f"/api/auth/connect?connection=linear"
+            }]
+        )
+        yield sse("done")
+        return
+    
+    if not req.linearTeamId:
+        yield sse("message", content="⚠️ Linear is not properly configured for this project. Please select a team in the Linear tab.")
         yield sse("done")
         return
 
@@ -709,7 +721,14 @@ def handle_linear_move_issue_propose(req, plan, hist):
 def handle_linear_move_issue(req, plan, hist):
     """Actually move a Linear issue."""
     if not req.linearAccessToken:
-        yield sse("message", content="⚠️ Linear is not connected.")
+        yield sse("message", 
+            content="⚠️ Your Linear account is not connected.",
+            actions=[{
+                "label": "Connect Linear", 
+                "icon": "linear", 
+                "url": f"/api/auth/connect?connection=linear"
+            }]
+        )
         yield sse("done")
         return
 
@@ -727,8 +746,20 @@ def handle_linear_move_issue(req, plan, hist):
 
 def handle_linear_list_board(req, plan, hist):
     """List issues on the project board."""
-    if not req.linearAccessToken or not req.linearProjectId:
-        yield sse("message", content="⚠️ Linear project is not initialized for this project.")
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Your Linear account is not connected.",
+            actions=[{
+                "label": "Connect Linear", 
+                "icon": "linear", 
+                "url": f"/api/auth/connect?connection=linear"
+            }]
+        )
+        yield sse("done")
+        return
+
+    if not req.linearProjectId:
+        yield sse("message", content="⚠️ Linear project is not initialized for this project. Please set it up in the Linear tab.")
         yield sse("done")
         return
 

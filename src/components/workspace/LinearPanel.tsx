@@ -46,10 +46,19 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
     try {
       const resp = await fetch(`/api/projects/${projectId}/linear`);
       if (resp.status === 403) {
-          setStatus("loading"); // Or handle "not connected"
+          setStatus("loading");
+          setLoading(false);
+          // Special state for not connected
+          (window as any).__LINEAR_NOT_CONNECTED = true; 
+          setLoading(false);
           return;
       }
       const data = await resp.json();
+      if (data.error === "linear_not_linked") {
+         setStatus("loading");
+         setLoading(false);
+         return;
+      }
       if (data.status === "uninitialized") {
         setTeams(data.teams || []);
         setStatus("uninitialized");
@@ -105,12 +114,34 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
     }
   };
 
-  if (loading) {
+  if (!loading && (status === "loading" || (window as any).__LINEAR_NOT_CONNECTED)) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-zinc-50/50">
-        <div className="flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900" />
-            <span className="text-xs text-zinc-400 font-medium">Loading board...</span>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-zinc-50/50">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-zinc-200 p-8 shadow-sm text-center">
+          <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6 transition-transform hover:scale-110">
+             <svg className="w-8 h-8 text-zinc-900" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22" />
+                <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
+             </svg>
+          </div>
+          <h2 className="text-xl font-bold text-zinc-900 mb-2">Connect your Linear</h2>
+          <p className="text-zinc-500 mb-8 text-sm leading-relaxed px-4">
+            Link your Linear account to track issues, cycles, and project progress directly within your workspace.
+          </p>
+          
+          <div className="space-y-3">
+            <a
+              href={`/api/auth/connect?connection=linear&returnTo=/project/${projectId}`}
+              className="w-full inline-flex items-center justify-center gap-2 bg-zinc-950 text-white rounded-xl px-4 py-3 text-sm font-bold hover:bg-zinc-800 transition-all shadow-md active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 01-5.656 5.656l-1.102-1.102" />
+              </svg>
+              Connect Linear Account
+            </a>
+            <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-widest">Secure OAuth Connection</p>
+          </div>
         </div>
       </div>
     );

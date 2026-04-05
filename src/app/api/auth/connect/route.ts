@@ -59,11 +59,14 @@ export async function GET(req: Request) {
     params.append("connection_scope", "repo,user,read:org");
   } else if (connection === "google-oauth2") {
     // For Google/Gmail/Calendar/Tasks
-    params.append("connection_scope", [
+      params.append("connection_scope", [
       "https://www.googleapis.com/auth/gmail.modify",
       "https://www.googleapis.com/auth/calendar.events",
       "https://www.googleapis.com/auth/tasks.readonly"
     ].join(" "));
+  } else if (connection === "linear") {
+    // For Linear API access
+    params.append("connection_scope", "read,write");
   }
 
   console.log(`[Connect] Initiating ${connection} connection for user ${session.user.sub}`);

@@ -20,6 +20,25 @@ const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    id: "slack",
+    label: "Slack",
+    icon: (
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+      </svg>
+    ),
+  },
+  {
+    id: "linear",
+    label: "Linear",
+    icon: (
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="17" x2="12" y2="22" />
+        <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
+      </svg>
+    ),
+  },
+  {
     id: "gmail",
     label: "Gmail",
     icon: (
@@ -34,24 +53,6 @@ const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     icon: (
       <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-  {
-    id: "slack",
-    label: "Slack",
-    icon: (
-      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-      </svg>
-    ),
-  },
-  {
-    id: "linear",
-    label: "Linear",
-    icon: (
-      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -72,39 +73,83 @@ export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
     return () => window.removeEventListener("highlight-tab", handler);
   }, []);
 
+  const topTabs = tabs.slice(0, 3); // Chat, Slack, Linear
+  const bottomTabs = tabs.slice(3); // Gmail, Calendar
+
   return (
-    <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 pb-4 gap-1 shrink-0">
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
-        const isHighlighted = highlightedTab === tab.id;
-        return (
-          <div key={tab.id} className="relative group">
-            <button
-              onClick={() => onTabChange(tab.id)}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                isActive
-                  ? "bg-zinc-900 text-white shadow-sm"
-                  : isHighlighted
-                  ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
-                  : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
-              }`}
-              aria-label={tab.label}
-            >
-              {tab.icon}
-            </button>
-            {/* Active indicator */}
-            {isActive && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-0.5 h-5 bg-zinc-900 rounded-full" />
-            )}
-            {/* Tooltip */}
-            <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-              <div className="bg-zinc-900 text-white text-[11px] font-medium px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
-                {tab.label}
+    <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 shrink-0">
+      {/* Top Section */}
+      <div className="flex flex-col items-center gap-1.5 w-full">
+        {topTabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const isHighlighted = highlightedTab === tab.id;
+          return (
+            <div key={tab.id} className="relative group">
+              <button
+                onClick={() => onTabChange(tab.id)}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                  isActive
+                    ? "bg-zinc-900 text-white shadow-sm"
+                    : isHighlighted
+                    ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
+                    : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+                }`}
+                aria-label={tab.label}
+              >
+                {tab.icon}
+              </button>
+              {/* Active indicator */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-0.5 h-5 bg-zinc-900 rounded-full" />
+              )}
+              {/* Tooltip */}
+              <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                <div className="bg-zinc-900 text-white text-[11px] font-medium px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
+                  {tab.label}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {/* Spacer to push items below to the absolute end */}
+      <div className="flex-1" />
+
+      {/* Bottom Section */}
+      <div className="flex flex-col items-center gap-1.5 w-full pt-3 pb-8 border-t border-zinc-100">
+        {bottomTabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const isHighlighted = highlightedTab === tab.id;
+          return (
+            <div key={tab.id} className="relative group">
+              <button
+                onClick={() => onTabChange(tab.id)}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                  isActive
+                    ? "bg-zinc-900 text-white shadow-sm"
+                    : isHighlighted
+                    ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
+                    : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+                }`}
+                aria-label={tab.label}
+              >
+                {tab.icon}
+              </button>
+              {/* Active indicator */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-0.5 h-5 bg-zinc-900 rounded-full" />
+              )}
+              {/* Tooltip */}
+              <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                <div className="bg-zinc-900 text-white text-[11px] font-medium px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
+                  {tab.label}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

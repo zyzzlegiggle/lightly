@@ -16,6 +16,7 @@ export interface AuthContext {
   userName: string;
   userImage?: string;
   githubToken: string;
+  linearAccessToken?: string | null;
 }
 
 export type AuthContextResult =
@@ -112,6 +113,7 @@ export async function getAuthContextResult(): Promise<AuthContextResult> {
     where: eq(account.userId, session.user.sub),
   });
   let githubToken = connections.find(c => c.providerId === "github")?.accessToken || null;
+  let linearAccessToken = connections.find(c => c.providerId === "linear")?.accessToken || null;
 
   if (githubToken) {
     console.log("[AuthContext] Found GitHub token in local account table for:", session.user.sub);
@@ -133,6 +135,7 @@ export async function getAuthContextResult(): Promise<AuthContextResult> {
       userName: session.user.name || session.user.nickname || "User",
       userImage: session.user.picture,
       githubToken,
+      linearAccessToken,
     },
   };
 }
