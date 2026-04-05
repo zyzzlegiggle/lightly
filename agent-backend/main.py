@@ -8,10 +8,10 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import git
 import requests
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -447,6 +447,75 @@ async def get_upload(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
+
+# ── Linear Integration Models & Endpoints ───────────────────────────────
+
+class LinearTeamRequest(BaseModel):
+    token: str
+
+class LinearInitRequest(BaseModel):
+    token: str
+    teamId: str
+    name: str
+
+class LinearBoardRequest(BaseModel):
+    token: str
+    teamId: str
+    projectId: str
+
+class LinearMoveRequest(BaseModel):
+    token: str
+    issueId: str
+    stateId: str
+
+class LinearCreateRequest(BaseModel):
+    token: str
+    teamId: str
+    projectId: Optional[str] = None
+    title: str
+    description: str = ""
+    stateId: Optional[str] = None
+
+@app.post("/api/linear/teams")
+async def linear_teams(req: LinearTeamRequest):
+    from linear_service import LinearService
+    svc = LinearService(req.token)
+    return {"teams": svc.get_teams()}
+
+@app.post("/api/linear/init")
+async def linear_init(req: LinearInitRequest):
+    from linear_service import LinearService
+    svc = LinearService(req.token)
+    project = svc.create_project(req.teamId, req.name)
+    return {"project": project}
+
+@app.post("/api/linear/board")
+async def linear_board(req: LinearBoardRequest):
+    from linear_service import LinearService
+    svc = LinearService(req.token)
+    states = svc.get_workflow_states(req.teamId)
+    issues = svc.list_project_issues(req.projectId)
+    return {"states": states, "issues": issues}
+
+@app.post("/api/linear/move")
+async def linear_move(req: LinearMoveRequest):
+    from linear_service import LinearService
+    svc = LinearService(req.token)
+    issue = svc.update_issue_state(req.issueId, req.stateId)
+    return {"issue": issue}
+
+@app.post("/api/linear/create")
+async def linear_create(req: LinearCreateRequest):
+    from linear_service import LinearService
+    svc = LinearService(req.token)
+    issue = svc.create_issue(
+        team_id=req.teamId,
+        title=req.title,
+        description=req.description,
+        project_id=req.projectId,
+        state_id=req.stateId
+    )
+    return {"issue": issue}
 
 if __name__ == "__main__":
     import uvicorn

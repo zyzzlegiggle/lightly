@@ -9,39 +9,115 @@ class LinearService:
             "Content-Type": "application/json"
         }
 
+    def _query(self, query: str, variables: Optional[Dict] = None) -> Dict:
+        resp = requests.post(
+            "https://api.linear.app/graphql",
+            headers=self.headers,
+            json={"query": query, "variables": variables or {}}
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            raise Exception(f"Linear API Error: {data['errors'][0]['message']}")
+        return data.get("data", {})
+
+    def get_teams(self) -> List[Dict]:
+        """List all teams the user has access to."""
+        query = """
+        query Teams {
+          teams {
+            nodes { id name key }
+          }
+        }
+        """
+        data = self._query(query)
+        return data.get("teams", {}).get("nodes", [])
+
+    def create_project(self, team_id: str, name: str, description: str = "") -> Dict:
+        """Create a new project in Linear."""
+        mutation = """
+        mutation ProjectCreate($teamId: String!, $name: String!, $description: String) {
+          projectCreate(input: { teamIds: [$teamId], name: $name, description: $description }) {
+            success
+            project { id name }
+          }
+        }
+        """
+        data = self._query(mutation, {"teamId": team_id, "name": name, "description": description})
+        return data.get("projectCreate", {}).get("project", {})
+
+    def get_workflow_states(self, team_id: str) -> List[Dict]:
+        """List workflow states for a team (Todo, Doing, Done, etc)."""
+        query = """
+        query WorkflowStates($teamId: String!) {
+          team(id: $teamId) {
+            states {
+              nodes { id name color type position }
+            }
+          }
+        }
+        """
+        data = self._query(query, {"teamId": team_id})
+        return data.get("team", {}).get("states", {}).get("nodes", [])
+
+    def list_project_issues(self, project_id: str) -> List[Dict]:
+        """List all issues for a specific Linear project."""
+        query = """
+        query ProjectIssues($projectId: String!) {
+          project(id: $projectId) {
+            issues {
+              nodes { 
+                id title identifier url priority
+                state { id name color type }
+                assignee { id name avatarUrl }
+              }
+            }
+          }
+        }
+        """
+        data = self._query(query, {"projectId": project_id})
+        return data.get("project", {}).get("issues", {}).get("nodes", [])
+
+    def create_issue(self, team_id: str, title: str, description: str = "", project_id: Optional[str] = None, state_id: Optional[str] = None) -> Dict:
+        """Create a new issue in Linear."""
+        mutation = """
+        mutation IssueCreate($teamId: String!, $title: String!, $description: String, $projectId: String, $stateId: String) {
+          issueCreate(input: { teamId: $teamId, title: $title, description: $description, projectId: $projectId, stateId: $stateId }) {
+            success
+            issue { id title identifier url state { id name } }
+          }
+        }
+        """
+        data = self._query(mutation, {
+            "teamId": team_id, 
+            "title": title, 
+            "description": description, 
+            "projectId": project_id,
+            "stateId": state_id
+        })
+        return data.get("issueCreate", {}).get("issue", {})
+
+    def update_issue_state(self, issue_id: str, state_id: str) -> Dict:
+        """Update an issue's workflow state."""
+        mutation = """
+        mutation IssueUpdate($id: String!, $stateId: String!) {
+          issueUpdate(id: $id, input: { stateId: $stateId }) {
+            success
+            issue { id title state { id name } }
+          }
+        }
+        """
+        data = self._query(mutation, {"id": issue_id, "stateId": state_id})
+        return data.get("issueUpdate", {}).get("issue", {})
+
     def search_issues(self, query: str) -> List[Dict]:
         """Search issues in Linear."""
-        # Simple search uses Linear's GraphQL API
         query_gql = """
         query SearchIssues($query: String!) {
-          issues(filter: { title: { contains: $query } }, first: 5) {
+          issues(filter: { title: { contains: $query } }, first: 10) {
             nodes { id title identifier url state { name } }
           }
         }
         """
-        resp = requests.post(
-            "https://api.linear.app/graphql",
-            headers=self.headers,
-            json={"query": query_gql, "variables": {"query": query}}
-        )
-        if not resp.ok:
-            return []
-        return resp.json().get("data", {}).get("issues", {}).get("nodes", [])
-
-    def create_issue(self, team_id: str, title: str, description: str = "") -> Dict:
-        """Create a new issue in Linear."""
-        mutation = """
-        mutation IssueCreate($teamId: String!, $title: String!, $description: String) {
-          issueCreate(input: { teamId: $teamId, title: $title, description: $description }) {
-            success
-            issue { id title identifier url }
-          }
-        }
-        """
-        resp = requests.post(
-            "https://api.linear.app/graphql",
-            headers=self.headers,
-            json={"query": mutation, "variables": {"teamId": team_id, "title": title, "description": description}}
-        )
-        resp.raise_for_status()
-        return resp.json().get("data", {}).get("issueCreate", {}).get("issue", {})
+        data = self._query(query_gql, {"query": query})
+        return data.get("issues", {}).get("nodes", [])

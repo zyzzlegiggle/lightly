@@ -64,6 +64,9 @@ export const project = pgTable("project", {
 	lastPreviewUrl: text("lastPreviewUrl"),
 	appSpecRaw: jsonb("appSpecRaw"),
 	slackChannelId: text("slackChannelId"),
+	pendingChanges: jsonb("pendingChanges"),
+	linearProjectId: text("linearProjectId"),
+	linearTeamId: text("linearTeamId"),
 	createdAt: timestamp("createdAt").notNull().defaultNow(),
 	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });

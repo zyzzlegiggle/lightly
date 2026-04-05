@@ -10,6 +10,7 @@ import { NotionPanel } from "@/components/workspace/NotionPanel";
 import { CalendarPanel } from "@/components/workspace/CalendarPanel";
 import { GmailPanel } from "@/components/workspace/GmailPanel";
 import { SlackPanel } from "@/components/workspace/SlackPanel";
+import { LinearPanel } from "@/components/workspace/LinearPanel";
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -34,6 +35,7 @@ export default function WorkspacePage() {
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
+  const [isChangesOpen, setIsChangesOpen] = useState(false);
 
   const phase = statusData?.phase || "BUILDING";
 
@@ -83,6 +85,44 @@ export default function WorkspacePage() {
     };
     fetchProjects();
   }, []);
+
+  // ── Persistence: Load pending changes ──
+  useEffect(() => {
+    const fetchChanges = async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/changes`);
+        if (res.ok) {
+          const data = await res.json();
+          setPendingChanges(data.changes || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch pending changes", err);
+      }
+    };
+    if (projectId) fetchChanges();
+  }, [projectId]);
+
+  // ── Persistence: Save pending changes ──
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    const saveChanges = async () => {
+      try {
+        await fetch(`/api/projects/${projectId}/changes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changes: pendingChanges }),
+        });
+      } catch (err) {
+        console.error("Failed to save pending changes", err);
+      }
+    };
+    const t = setTimeout(saveChanges, 1000);
+    return () => clearTimeout(t);
+  }, [pendingChanges, projectId]);
 
   // ── Periodic health check ──
   useEffect(() => {
@@ -262,6 +302,49 @@ export default function WorkspacePage() {
             </>
           )}
         </div>
+
+        {/* Push Changes Dropdown */}
+        <div className="ml-auto relative">
+          <button
+            onClick={() => setIsChangesOpen(!isChangesOpen)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-sm font-semibold ${
+              pendingChanges.length > 0
+                ? "bg-zinc-950 text-white border-zinc-900 shadow-md transform hover:scale-105 active:scale-95"
+                : "bg-white text-zinc-400 border-zinc-200 cursor-default opacity-60"
+            }`}
+          >
+            <div className="relative">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              {pendingChanges.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-emerald-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-zinc-950">
+                  {pendingChanges.length}
+                </span>
+              )}
+            </div>
+            <span>Push Changes</span>
+          </button>
+
+          {isChangesOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setIsChangesOpen(false)} />
+              <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-zinc-200 rounded-2xl shadow-2xl z-30 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                <ChangesPanel
+                  changes={pendingChanges}
+                  onDiscard={handleDiscardChange}
+                  onDiscardAll={handleDiscardAll}
+                  onConfirmAll={async () => {
+                      await handleConfirmAll();
+                      setIsChangesOpen(false);
+                  }}
+                  isConfirming={isConfirming}
+                  isReverting={isReverting}
+                />
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Main layout ── */}
@@ -284,18 +367,9 @@ export default function WorkspacePage() {
         )}
         {activeTab === "gmail" && <GmailPanel />}
         {activeTab === "calendar" && <CalendarPanel />}
-        {activeTab === "notion" && <NotionPanel />}
-        {activeTab === "slack" && <SlackPanel />}
 
-        {/* Changes panel — floating top-right */}
-        <ChangesPanel
-          changes={pendingChanges}
-          onDiscard={handleDiscardChange}
-          onDiscardAll={handleDiscardAll}
-          onConfirmAll={handleConfirmAll}
-          isConfirming={isConfirming}
-          isReverting={isReverting}
-        />
+        {activeTab === "slack" && <SlackPanel />}
+        {activeTab === "linear" && <LinearPanel projectId={projectId} />}
 
         {/* ── Browser preview ── */}
         <div className="flex-1 overflow-hidden p-3 flex flex-col gap-0">

@@ -51,6 +51,8 @@ class AgentChatRequest(BaseModel):
     slackChannelId: Optional[str] = None
     notionAccessToken: Optional[str] = None
     linearAccessToken: Optional[str] = None
+    linearProjectId: Optional[str] = None
+    linearTeamId: Optional[str] = None
 
 # ── Prompts (kept short for token efficiency) ───────────────────────────
 
@@ -82,7 +84,9 @@ PLAN_PROMPT = (
     "Create (Propose): {\"notion_create_propose\": {\"title\": \"...\", \"content\": \"...\"}}\n\n"
     "─── LINEAR TOOLS ───\n"
     "Search: {\"linear_search\": {\"query\": \"...\"}}\n"
-    "Create (Propose): {\"linear_create_propose\": {\"title\": \"...\", \"description\": \"...\", \"team_id\": \"...\"}}\n\n"
+    "Create Issue (Propose): {\"linear_create_propose\": {\"title\": \"...\", \"description\": \"...\"}}\n"
+    "Move Issue (Propose): {\"linear_move_issue\": {\"issue_id\": \"...\", \"state_id\": \"...\"}}\n"
+    "List Board: {\"linear_list_board\": {}}\n\n"
     "─── CODE TOOL ───\n"
     "Pick files: {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
     "Clarify/Chat: {\"clarify\": \"question\", \"plan\": \"\"}"
@@ -639,50 +643,108 @@ def handle_notion_create(req, plan, hist):
         yield sse("message", content=f"Failed to create page: {str(e)}")
     yield sse("done")
 
-def handle_linear_search(req, plan, hist):
-    """Search Linear issues."""
-    if not req.linearAccessToken:
-        yield sse("message", 
-            content="⚠️ Linear is not connected. Please connect your account to search issues.",
-            actions=[{"label": "Connect Linear", "url": "/api/auth/connect?connection=linear", "icon": "external"}]
-        )
-        yield sse("done")
-        return
-    query = plan["linear_search"].get("query", "")
-    yield sse("status", content=f"Searching Linear for '{query}'...")
-    try:
-        linear = LinearService(req.linearAccessToken)
-        results = linear.search_issues(query)
-        yield sse("message", content=f"Found {len(results)} issues matching '{query}'.")
-    except Exception as e:
-        yield sse("message", content=f"Failed to search: {str(e)}")
-    yield sse("done")
-
 def handle_linear_create_propose(req, plan, hist):
     """Propose creating a Linear issue."""
     details = plan["linear_create_propose"]
     title = details.get("title", "")
-    yield sse("message", content=f"Proposing issue: **{title}**",
-              actions=[{"label": "Create Issue", "icon": "linear", "confirmAction": "linear_create", "params": {"title": title}}])
+    description = details.get("description", "")
+    
+    yield sse("message", 
+        content=f"I'll create a Linear issue for this:\n\n**Title:** {title}\n{description}",
+        actions=[{
+            "label": "Create Issue", 
+            "icon": "linear", 
+            "tab": "linear",
+            "confirmAction": "linear_create", 
+            "params": {"title": title, "description": description}
+        }]
+    )
     yield sse("done")
 
 def handle_linear_create(req, plan, hist):
-    """Actually create the Linear issue after confirmation."""
-    if not req.linearAccessToken:
-        yield sse("message", 
-            content="⚠️ Linear is not connected. Please connect your account to create issues.",
-            actions=[{"label": "Connect Linear", "url": "/api/auth/connect?connection=linear", "icon": "external"}]
-        )
+    """Actually create the Linear issue."""
+    if not req.linearAccessToken or not req.linearTeamId:
+        yield sse("message", content="⚠️ Linear is not properly configured for this project. Please connect Linear in settings.")
         yield sse("done")
         return
-    details = plan["linear_create"]
-    yield sse("status", content=f"Creating issue: {details.get('title')}...")
+
+    details = req.message.split(" ", 2)[2] if req.message.startswith("Confirmed: ") else json.dumps(plan["linear_create"])
+    params = json.loads(details)
+    
+    yield sse("status", content="Creating Linear issue...")
     try:
         linear = LinearService(req.linearAccessToken)
-        # Requires a teamId which we'd typically get from context or listTeams
-        yield sse("message", content=f"✅ Issue created (placeholder). To fully implement, we need team selection.")
+        issue = linear.create_issue(
+            team_id=req.linearTeamId,
+            title=params.get("title"),
+            description=params.get("description", ""),
+            project_id=req.linearProjectId
+        )
+        yield sse("message", 
+            content=f"✅ Issue created: **{issue['identifier']} - {issue['title']}**",
+            actions=[{"label": "View in Linear", "url": issue["url"], "icon": "linear", "tab": "linear"}]
+        )
     except Exception as e:
         yield sse("message", content=f"Failed to create issue: {str(e)}")
+    yield sse("done")
+
+def handle_linear_move_issue_propose(req, plan, hist):
+    """Propose moving a Linear issue."""
+    details = plan["linear_move_issue"]
+    issue_id = details.get("issue_id")
+    state_id = details.get("state_id")
+    
+    yield sse("message", 
+        content=f"Should I move issue {issue_id} to the new state?",
+        actions=[{
+            "label": "Move Issue", 
+            "icon": "linear", 
+            "tab": "linear",
+            "confirmAction": "linear_move_issue", 
+            "params": {"issue_id": issue_id, "state_id": state_id}
+        }]
+    )
+    yield sse("done")
+
+def handle_linear_move_issue(req, plan, hist):
+    """Actually move a Linear issue."""
+    if not req.linearAccessToken:
+        yield sse("message", content="⚠️ Linear is not connected.")
+        yield sse("done")
+        return
+
+    details = req.message.split(" ", 2)[2] if req.message.startswith("Confirmed: ") else json.dumps(plan["linear_move_issue"])
+    params = json.loads(details)
+    
+    yield sse("status", content="Moving issue...")
+    try:
+        linear = LinearService(req.linearAccessToken)
+        issue = linear.update_issue_state(params["issue_id"], params["state_id"])
+        yield sse("message", content=f"✅ Issue **{issue['title']}** moved to **{issue['state']['name']}**.")
+    except Exception as e:
+        yield sse("message", content=f"Failed to move issue: {str(e)}")
+    yield sse("done")
+
+def handle_linear_list_board(req, plan, hist):
+    """List issues on the project board."""
+    if not req.linearAccessToken or not req.linearProjectId:
+        yield sse("message", content="⚠️ Linear project is not initialized for this project.")
+        yield sse("done")
+        return
+
+    yield sse("status", content="Fetching board...")
+    try:
+        linear = LinearService(req.linearAccessToken)
+        issues = linear.list_project_issues(req.linearProjectId)
+        
+        summary = call_llm([
+            {"role": "system", "content": "Summarize the Linear board state. Group issues by their workflow state concisely."},
+            *hist,
+            {"role": "user", "content": f"Issues found in Linear project:\n{json.dumps(issues, indent=2)}\n\nSummarize these for the user."}
+        ])
+        yield sse("message", content=summary, actions=[{"label": "View Board", "tab": "linear", "icon": "linear"}])
+    except Exception as e:
+        yield sse("message", content=f"Failed to fetch board: {str(e)}")
     yield sse("done")
 
 def handle_tasks_update(req, plan, hist):
@@ -753,6 +815,8 @@ def run_agent(req: AgentChatRequest):
                     yield from handle_notion_create(req, plan, [])
                 elif action_name == "linear_create":
                     yield from handle_linear_create(req, plan, [])
+                elif action_name == "linear_move_issue":
+                    yield from handle_linear_move_issue(req, plan, [])
                 return
             except Exception as e:
                 print(f"[Agent] Confirmation failed: {e}")
@@ -845,6 +909,12 @@ def run_agent(req: AgentChatRequest):
             return
         if "linear_create_propose" in plan:
             yield from handle_linear_create_propose(req, plan, hist)
+            return
+        if "linear_move_issue" in plan:
+            yield from handle_linear_move_issue_propose(req, plan, hist)
+            return
+        if "linear_list_board" in plan:
+            yield from handle_linear_list_board(req, plan, hist)
             return
         if "calendar_create" in plan:
             yield from handle_calendar_create(req, plan, hist)

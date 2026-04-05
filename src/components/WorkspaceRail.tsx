@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-export type WorkspaceTab = "chat" | "gmail" | "calendar" | "notion" | "slack";
+export type WorkspaceTab = "chat" | "gmail" | "calendar" | "notion" | "slack" | "linear";
 
 interface WorkspaceRailProps {
   activeTab: WorkspaceTab | null;
@@ -38,20 +38,20 @@ const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
-    id: "notion",
-    label: "Notion",
-    icon: (
-      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    ),
-  },
-  {
     id: "slack",
     label: "Slack",
     icon: (
       <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+      </svg>
+    ),
+  },
+  {
+    id: "linear",
+    label: "Linear",
+    icon: (
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },

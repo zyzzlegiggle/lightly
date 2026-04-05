@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Auth0Provider } from "@auth0/nextjs-auth0";
+import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 const inter = Inter({
@@ -26,6 +27,7 @@ export default function RootLayout({
       >
         <Auth0Provider>
           {children}
+          <Toaster position="top-right" />
         </Auth0Provider>
       </body>
     </html>
