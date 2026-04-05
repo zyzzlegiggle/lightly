@@ -63,8 +63,8 @@ export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
     return () => window.removeEventListener("highlight-tab", handler);
   }, []);
 
-  const topTabs = tabs.slice(0, 2); // Chat, Slack
-  const bottomTabs = tabs.slice(2); // Gmail, Calendar
+  const topTabs = tabs; // Move all tabs to the top section to be grouped together
+  const bottomTabs: typeof tabs = []; // Empty the bottom section for now
 
   return (
     <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 shrink-0">
@@ -107,39 +107,41 @@ export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
       <div className="flex-1" />
 
       {/* Bottom Section */}
-      <div className="flex flex-col items-center gap-1.5 w-full pt-3 pb-8 border-t border-zinc-100">
-        {bottomTabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const isHighlighted = highlightedTab === tab.id;
-          return (
-            <div key={tab.id} className="relative group">
-              <button
-                onClick={() => onTabChange(tab.id)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                  isActive
-                    ? "bg-zinc-900 text-white shadow-sm"
-                    : isHighlighted
-                    ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
-                    : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
-                }`}
-                aria-label={tab.label}
-              >
-                {tab.icon}
-              </button>
-              {/* Active indicator */}
-              {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-0.5 h-5 bg-zinc-900 rounded-full" />
-              )}
-              {/* Tooltip */}
-              <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-                <div className="bg-zinc-900 text-white text-[11px] font-medium px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
-                  {tab.label}
+      {bottomTabs.length > 0 && (
+        <div className="flex flex-col items-center gap-1.5 w-full pt-3 pb-8 border-t border-zinc-100">
+          {bottomTabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const isHighlighted = highlightedTab === tab.id;
+            return (
+              <div key={tab.id} className="relative group">
+                <button
+                  onClick={() => onTabChange(tab.id)}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                    isActive
+                      ? "bg-zinc-900 text-white shadow-sm"
+                      : isHighlighted
+                      ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110"
+                      : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                  aria-label={tab.label}
+                >
+                  {tab.icon}
+                </button>
+                {/* Active indicator */}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-0.5 h-5 bg-zinc-900 rounded-full" />
+                )}
+                {/* Tooltip */}
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                  <div className="bg-zinc-900 text-white text-[11px] font-medium px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
+                    {tab.label}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
