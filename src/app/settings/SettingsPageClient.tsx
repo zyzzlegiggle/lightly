@@ -284,57 +284,6 @@ export default function SettingsPageClient({
 
 
 
-              {/* Linear Integration */}
-              {connectedProviders.includes("linear") ? (
-                <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center text-white">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="17" x2="12" y2="22" />
-                        <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-text-primary">Linear Workspace</p>
-                      <p className="text-xs text-text-muted">Connected for task tracking</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
-                      Active
-                    </div>
-                    <button
-                      onClick={handleDisconnectLinear}
-                      disabled={disconnecting === "linear"}
-                      className="px-2 py-1 text-[10px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                    >
-                      {disconnecting === "linear" ? "..." : "Disconnect"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <a
-                  href="/api/auth/connect?connection=linear&returnTo=/settings"
-                  className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-500 group-hover:text-zinc-600 transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="17" x2="12" y2="22" />
-                        <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-zinc-500 group-hover:text-zinc-800 transition-colors">Connect Linear</p>
-                      <p className="text-xs text-zinc-400">Track issues and cycles</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
-                    Connect
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-                  </span>
-                </a>
-              )}
             </div>
           </div>
 

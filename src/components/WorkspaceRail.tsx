@@ -29,16 +29,6 @@ const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
-    id: "linear",
-    label: "Linear",
-    icon: (
-      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="12" y1="17" x2="12" y2="22" />
-        <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
-      </svg>
-    ),
-  },
-  {
     id: "gmail",
     label: "Gmail",
     icon: (
@@ -73,8 +63,8 @@ export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
     return () => window.removeEventListener("highlight-tab", handler);
   }, []);
 
-  const topTabs = tabs.slice(0, 3); // Chat, Slack, Linear
-  const bottomTabs = tabs.slice(3); // Gmail, Calendar
+  const topTabs = tabs.slice(0, 2); // Chat, Slack
+  const bottomTabs = tabs.slice(2); // Gmail, Calendar
 
   return (
     <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 shrink-0">

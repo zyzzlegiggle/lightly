@@ -41,6 +41,11 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
   const [states, setStates] = useState<State[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [selectedTeam, setSelectedTeam] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newIssueTitle, setNewIssueTitle] = useState("");
+  const [newIssueDesc, setNewIssueDesc] = useState("");
+  const [creatingIssue, setCreatingIssue] = useState(false);
+  const [draggedIssueId, setDraggedIssueId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -48,9 +53,7 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
       if (resp.status === 403) {
           setStatus("loading");
           setLoading(false);
-          // Special state for not connected
           (window as any).__LINEAR_NOT_CONNECTED = true; 
-          setLoading(false);
           return;
       }
       const data = await resp.json();
@@ -99,7 +102,11 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
 
   const handleMove = async (issueId: string, stateId: string) => {
     const oldIssues = [...issues];
-    setIssues(issues.map(iss => iss.id === issueId ? { ...iss, state: states.find(s => s.id === stateId)! } : iss));
+    const targetState = states.find(s => s.id === stateId);
+    if (!targetState) return;
+
+    // Optimistic update
+    setIssues(issues.map(iss => iss.id === issueId ? { ...iss, state: targetState } : iss));
 
     try {
       const resp = await fetch(`/api/projects/${projectId}/linear`, {
@@ -111,6 +118,67 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
     } catch (err) {
       setIssues(oldIssues);
       toast.error("Failed to move issue");
+    }
+  };
+
+  const handleCreateIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIssueTitle) return;
+    setCreatingIssue(true);
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/linear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          action: "create", 
+          title: newIssueTitle, 
+          description: newIssueDesc,
+          stateId: states.find(s => s.type === "unstarted")?.id
+        })
+      });
+      if (!resp.ok) throw new Error();
+      
+      setIsCreateModalOpen(false);
+      setNewIssueTitle("");
+      setNewIssueDesc("");
+      fetchData();
+      toast.success("Issue created!");
+    } catch (err) {
+      toast.error("Failed to create issue");
+    } finally {
+      setCreatingIssue(false);
+    }
+  };
+
+  // Drag and Drop handlers
+  const onDragStart = (e: React.DragEvent, issueId: string) => {
+    setDraggedIssueId(issueId);
+    e.dataTransfer.setData("issueId", issueId);
+    e.dataTransfer.effectAllowed = "move";
+    
+    // Add a ghost effect class through a timeout
+    setTimeout(() => {
+      const target = e.target as HTMLElement;
+      target.classList.add("opacity-40");
+    }, 0);
+  };
+
+  const onDragEnd = (e: React.DragEvent) => {
+    setDraggedIssueId(null);
+    const target = e.target as HTMLElement;
+    target.classList.remove("opacity-40");
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const onDrop = (e: React.DragEvent, stateId: string) => {
+    e.preventDefault();
+    const issueId = e.dataTransfer.getData("issueId");
+    if (issueId) {
+      handleMove(issueId, stateId);
     }
   };
 
@@ -151,7 +219,7 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-zinc-50/50">
         <div className="max-w-md w-full bg-white rounded-2xl border border-zinc-200 p-8 shadow-sm">
-          <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center mb-6">
+          <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-zinc-200">
              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
              </svg>
@@ -171,7 +239,7 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
             <button
               onClick={handleInit}
               disabled={!selectedTeam || initLoading}
-              className="w-full bg-zinc-950 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-zinc-800 disabled:opacity-50 transition-all shadow-sm"
+              className="w-full bg-zinc-950 text-white rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-zinc-800 disabled:opacity-50 transition-all shadow-sm active:scale-95"
             >
               {initLoading ? "Initializing..." : "Create Project Board"}
             </button>
@@ -184,7 +252,7 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
   const columns = states.filter(s => ["unstarted", "started", "completed"].includes(s.type));
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-50/50 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-zinc-50/50 overflow-hidden relative">
       <div className="h-14 border-b border-zinc-200 bg-white px-6 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-zinc-950 rounded-lg flex items-center justify-center">
@@ -208,12 +276,24 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
             >
                 <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </button>
+            <button 
+                onClick={() => setIsCreateModalOpen(true)}
+                className="flex items-center gap-2 bg-zinc-950 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-zinc-800 transition-all shadow-sm active:scale-95"
+            >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+                New Issue
+            </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-x-auto p-6 flex gap-6 items-start">
         {columns.map(column => (
-          <div key={column.id} className="w-80 shrink-0 flex flex-col gap-4">
+          <div 
+            key={column.id} 
+            className="w-80 shrink-0 flex flex-col gap-4"
+            onDragOver={onDragOver}
+            onDrop={(e) => onDrop(e, column.id)}
+          >
              <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2.5">
                   <div className="w-1.5 h-1.5 rounded-full shadow-sm" style={{ backgroundColor: column.color }} />
@@ -224,11 +304,14 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
                 </div>
              </div>
 
-             <div className="flex flex-col gap-2.5">
+             <div className="flex flex-col gap-2.5 min-h-[500px] border-t border-transparent border-dashed group-hover:border-zinc-200 rounded-xl transition-all">
                 {issues.filter(i => i.state.id === column.id).map(issue => (
                   <div 
                     key={issue.id} 
-                    className="group bg-white border border-zinc-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-zinc-300 transition-all cursor-default"
+                    draggable
+                    onDragStart={(e) => onDragStart(e, issue.id)}
+                    onDragEnd={onDragEnd}
+                    className={`group bg-white border border-zinc-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-zinc-300 transition-all cursor-grab active:cursor-grabbing ${draggedIssueId === issue.id ? 'opacity-40 border-dashed scale-95' : ''}`}
                   >
                     <div className="flex items-start justify-between mb-2">
                         <span className="text-[10px] font-bold text-zinc-300 tracking-wider">#{issue.identifier}</span>
@@ -240,10 +323,10 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
                     
                     <div className="flex items-center justify-between pt-2 border-t border-zinc-50">
                        <div className="flex gap-1.5">
-                          {states.filter(s => s.id !== column.id && ["unstarted", "started", "completed"].includes(s.type)).map(nextState => (
+                          {states.filter(s => s.id !== column.id && ["unstarted", "started", "completed"].includes(s.type)).slice(0, 2).map(nextState => (
                             <button
                               key={nextState.id}
-                              onClick={() => handleMove(issue.id, nextState.id)}
+                              onClick={(e) => { e.stopPropagation(); handleMove(issue.id, nextState.id); }}
                               className="text-[9px] font-black text-zinc-400 hover:text-white bg-zinc-50 hover:bg-zinc-900 px-2 py-1 rounded-md border border-zinc-200 hover:border-zinc-900 transition-all opacity-0 group-hover:opacity-100 uppercase"
                             >
                               {nextState.name.split(' ')[0]}
@@ -257,14 +340,68 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
                   </div>
                 ))}
                 
-                <button className="flex items-center justify-center gap-2 text-zinc-400 hover:text-zinc-800 hover:bg-white hover:shadow-sm p-4 rounded-xl transition-all text-[11px] font-bold border border-dashed border-zinc-200 hover:border-zinc-300">
-                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
-                   New Issue
-                </button>
+                {column.type === "unstarted" && (
+                    <button 
+                        onClick={() => setIsCreateModalOpen(true)}
+                        className="flex items-center justify-center gap-2 text-zinc-400 hover:text-zinc-800 hover:bg-white hover:border-zinc-300 hover:shadow-sm p-4 rounded-xl transition-all text-[11px] font-bold border border-dashed border-zinc-200"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
+                        Add Task
+                    </button>
+                )}
              </div>
           </div>
         ))}
       </div>
+
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-zinc-950/20 backdrop-blur-sm" onClick={() => setIsCreateModalOpen(false)} />
+            <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-zinc-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-8">
+                    <h3 className="text-xl font-bold text-zinc-900 mb-6">New Linear Task</h3>
+                    <form onSubmit={handleCreateIssue} className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest pl-1">Title</label>
+                            <input 
+                                autoFocus
+                                required
+                                value={newIssueTitle}
+                                onChange={e => setNewIssueTitle(e.target.value)}
+                                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-950 transition-all"
+                                placeholder="What needs to be done?"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest pl-1">Description (Optional)</label>
+                            <textarea 
+                                value={newIssueDesc}
+                                onChange={e => setNewIssueDesc(e.target.value)}
+                                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-950 transition-all min-h-[120px] resize-none"
+                                placeholder="Add more context..."
+                            />
+                        </div>
+                        <div className="flex gap-4 pt-4">
+                            <button 
+                                type="button"
+                                onClick={() => setIsCreateModalOpen(false)}
+                                className="flex-1 px-6 py-4 rounded-2xl text-sm font-bold text-zinc-500 hover:bg-zinc-100 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                type="submit"
+                                disabled={creatingIssue || !newIssueTitle}
+                                className="flex-[2] bg-zinc-950 text-white px-6 py-4 rounded-2xl text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition-all shadow-lg shadow-zinc-200 active:scale-95"
+                            >
+                                {creatingIssue ? "Creating..." : "Create Task"}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 }

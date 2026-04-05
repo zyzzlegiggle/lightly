@@ -201,7 +201,12 @@ export async function GET(req: Request) {
 
   if (existing) {
     await db.update(account)
-      .set({ accessToken: serviceToken, refreshToken: refreshToken ?? existing.refreshToken, updatedAt: new Date() })
+      .set({ 
+        accessToken: serviceToken, 
+        refreshToken: refreshToken ?? existing.refreshToken, 
+        accessTokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
+        updatedAt: new Date() 
+      })
       .where(eq(account.id, existing.id));
   } else {
     await db.insert(account).values({
@@ -211,6 +216,7 @@ export async function GET(req: Request) {
       accountId: secondarySub || connection,
       accessToken: serviceToken,
       refreshToken: refreshToken ?? null,
+      accessTokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
