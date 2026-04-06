@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 interface ChatAction {
   label: string;
   url?: string;
-  icon?: "calendar" | "email" | "external" | "notion" | "linear";
+  icon?: "calendar" | "email" | "external" | "notion" | "linear" | "slack";
   tab?: string;
   confirmAction?: string;
   params?: any;
@@ -530,6 +530,18 @@ export function ChatSidebar({
                                       <svg className="w-3.5 h-3.5 text-zinc-900" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                         <line x1="12" y1="17" x2="12" y2="22" />
                                         <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
+                                      </svg>
+                                    )}
+                                    {action.icon === "slack" && (
+                                      <svg className="w-3.5 h-3.5" viewBox="0 0 54 54" fill="none">
+                                        <path d="M19.712 33.867a4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286 4.285 4.285 0 014.286-4.285h4.285v4.285z" fill="#E01E5A"/>
+                                        <path d="M21.857 33.867a4.285 4.285 0 014.286-4.285 4.285 4.285 0 014.285 4.285v10.714a4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286V33.867z" fill="#E01E5A"/>
+                                        <path d="M26.143 19.712a4.285 4.285 0 01-4.286-4.285 4.285 4.285 0 014.286-4.286 4.285 4.285 0 014.285 4.286v4.285H26.143z" fill="#36C5F0"/>
+                                        <path d="M26.143 21.857a4.285 4.285 0 014.285 4.286 4.285 4.285 0 01-4.285 4.285H15.427a4.285 4.285 0 01-4.286-4.285 4.285 4.285 0 014.286-4.286H26.143z" fill="#36C5F0"/>
+                                        <path d="M40.298 26.143a4.285 4.285 0 014.285 4.285 4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286V26.143h4.286z" fill="#2EB67D"/>
+                                        <path d="M38.153 26.143a4.285 4.285 0 01-4.285-4.286 4.285 4.285 0 014.285-4.285h10.714a4.285 4.285 0 014.286 4.285 4.285 4.285 0 01-4.286 4.286H38.153z" fill="#2EB67D"/>
+                                        <path d="M33.867 40.298a4.285 4.285 0 014.286 4.285 4.285 4.285 0 01-4.286 4.286 4.285 4.285 0 01-4.285-4.286V40.298h4.285z" fill="#ECB22E"/>
+                                        <path d="M33.867 38.153a4.285 4.285 0 01-4.285 4.285 4.285 4.285 0 01-4.286-4.285V27.44a4.285 4.285 0 014.286-4.286 4.285 4.285 0 014.285 4.286v10.714z" fill="#ECB22E"/>
                                       </svg>
                                     )}
                                     {(!action.icon || action.icon === "external") && (

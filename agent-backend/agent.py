@@ -55,58 +55,62 @@ class AgentChatRequest(BaseModel):
     linearProjectId: Optional[str] = None
     linearTeamId: Optional[str] = None
 
-# ── Prompts (kept short for token efficiency) ───────────────────────────
+# ── Prompts ──────────────────────────────────────────────────────────────
 
 PLAN_PROMPT = (
-    "You are an AI Workspace Assistant. You have these capabilities:\n"
-    "1. **Code Editing**: Analyzing and modifying the project's source code.\n"
-    "2. **Gmail**: Search, read, send, and reply.\n"
-    "3. **Calendar**: Search, list, and create events.\n"
-    "4. **Tasks**: List, create, and update tasks.\n\n"
-    "CRITICAL: For any action that MODIFIES user data (Send, Create, Update, Reply), you MUST first use a `_propose` tool call "
-    "and wait for the user to click the confirm button. "
-    "Even if a service is ❌ (not connected), you MUST still output the JSON tool call (e.g., `gmail_search`, `slack_send_propose`) "
-    "and the system will show the login prompt. NEVER respond with plain text explaining why you can't do it.\n\n"
-    "Determine the best action (JSON only):\n"
-    "─── GMAIL TOOLS ───\n"
-    "Search: {\"gmail_search\": {\"query\": \"...\"}}\n"
-    "Read: {\"gmail_read\": {\"message_id\": \"id\"}}\n"
-    "Send (Propose): {\"gmail_send_propose\": {\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}}\n\n"
-    "─── CALENDAR TOOLS ───\n"
-    "Search/List: {\"calendar_list\": {\"max_results\": 10}}\n"
-    "Create (Propose): {\"calendar_create_propose\": {\"summary\": \"...\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}}\n\n"
-    "─── SLACK TOOLS ───\n"
-    "Send (Propose): {\"slack_send_propose\": {\"channel\": \"general\", \"text\": \"...\"}}\n\n"
-    "─── NOTION TOOLS ───\n"
-    "Search: {\"notion_search\": {\"query\": \"...\"}}\n"
-    "Add Note: {\"notion_add_note_propose\": {\"title\": \"...\", \"content\": \"markdown content\"}}\n\n"
-    "─── TASKS TOOLS ───\n"
-    "List: {\"tasks_list\": {}}\n"
-    "Create (Propose): {\"tasks_create_propose\": {\"title\": \"...\"}}\n"
-    "Update: {\"tasks_update\": {\"task_id\": \"...\", \"status\": \"completed\"}}\n\n"
-    "─── CODE TOOL ───\n"
-    "Pick files: {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
-    "Clarify/Chat: {\"clarify\": \"question\", \"plan\": \"\"}"
+    "You are Lightly, an AI workspace agent. You help users manage their project across code, email, calendar, tasks, and Slack.\n\n"
+    "RESPOND WITH EXACTLY ONE JSON OBJECT. No markdown fences, no explanation, no text before or after the JSON.\n\n"
+    "## Rules\n"
+    "1. Pick the SINGLE best tool for the user's request.\n"
+    "2. For WRITE actions (send, create, post), always use the `_propose` variant so the user can confirm.\n"
+    "3. For READ actions (search, list, read), use the direct tool.\n"
+    "4. CRITICAL: If a service is ❌ NOT CONNECTED, you MUST STILL output the tool call JSON. "
+    "The system will automatically show a login button. NEVER refuse with plain text.\n"
+    "5. If the request is conversational, a greeting, or unclear, use `clarify`.\n"
+    "6. If the request involves modifying project source code or UI, use `files_to_read`.\n"
+    "7. When composing emails or messages, write professional, complete content — not placeholders.\n\n"
+    "## Tools (return ONE)\n\n"
+    "GMAIL:\n"
+    '  {"gmail_search": {"query": "...", "max_results": 5}}\n'
+    '  {"gmail_read": {"message_id": "..."}}\n'
+    '  {"gmail_send_propose": {"to": "email@example.com", "subject": "...", "body": "full email body"}}\n'
+    '  {"gmail_reply_propose": {"message_id": "...", "body": "reply text"}}\n\n'
+    "CALENDAR:\n"
+    '  {"calendar_list": {"max_results": 10}}\n'
+    '  {"calendar_search": {"query": "..."}}\n'
+    '  {"calendar_create_propose": {"summary": "...", "start_time": "ISO-8601", "description": "..."}}\n\n'
+    "TASKS:\n"
+    '  {"tasks_list": {}}\n'
+    '  {"tasks_create_propose": {"title": "..."}}\n'
+    '  {"tasks_update": {"task_id": "...", "status": "completed"}}\n\n'
+    "SLACK:\n"
+    '  {"slack_list_channels": {}}\n'
+    '  {"slack_history": {"channel": "channel-name-or-id", "limit": 10}}\n'
+    '  {"slack_send_propose": {"channel": "general", "text": "..."}}\n\n'
+    "CODE EDITING:\n"
+    '  {"files_to_read": ["src/path/to/file.tsx"], "plan": "brief description of changes"}\n\n'
+    "GENERAL:\n"
+    '  {"clarify": "your helpful response or question", "plan": ""}\n'
 )
 
 EDIT_PROMPT = (
-    "You edit source code. The user is a DESIGNER (non-technical) viewing a specific page. "
-    "Focus changes on what affects that page unless asked otherwise. "
-    "If the user attached images or design files, treat them as UI reference/mockups. "
-    "Recreate or match the visual design from those references as closely as possible "
-    "using the project's existing tech stack (HTML, CSS, React, etc.). "
-    "IMPORTANT: If the request is still unclear or could be interpreted multiple ways, "
-    "ask a clarifying question instead of guessing: "
-    '{"clarify": "your question", "changes": [], "summary": ""} '
-    "For EACH change, include a 'description' field with a short, non-technical, "
-    "designer-friendly description of what changes VISUALLY. "
-    "Examples: 'Updated hero background to gradient blue-purple', "
-    "'Made card corners more rounded', 'Increased button size and padding'. "
-    "Do NOT mention file names or code in descriptions. "
-    'Return ONLY JSON: {"changes":[{"file":"path","content":"COMPLETE new file content",'
-    '"description":"designer-friendly visual description"}],'
-    '"summary":"friendly summary of all visual changes"}. '
-    'Include full file content for each changed file.'
+    "You edit source code for a web project. The user is viewing a specific page of their app.\n\n"
+    "RESPOND WITH EXACTLY ONE JSON OBJECT. No markdown fences, no text before or after.\n\n"
+    "## Rules\n"
+    "1. Focus changes on what affects the user's current page unless told otherwise.\n"
+    "2. Each change MUST include the COMPLETE file content — never partial snippets or diffs.\n"
+    "3. If uploaded images/mockups are referenced, recreate the design using the project's tech stack.\n"
+    "4. Preserve all existing functionality unless explicitly asked to remove it.\n"
+    "5. Write clean, production-quality code. Follow existing patterns and naming conventions.\n"
+    "6. If the request is ambiguous, ask for clarification instead of guessing.\n\n"
+    "## Output\n"
+    '{"changes": [{"file": "relative/path", "content": "COMPLETE file content", "description": "short visual description"}], "summary": "friendly summary"}\n\n'
+    "## description field — keep non-technical and visual:\n"
+    "  Good: 'Updated hero background to gradient blue-purple'\n"
+    "  Good: 'Added smooth hover animation to cards'\n"
+    "  Bad: 'Modified header.tsx line 42'\n\n"
+    "## If the request is unclear:\n"
+    '{"clarify": "your question", "changes": [], "summary": ""}\n'
 )
 
 # ── GitHub API helpers (no git clone needed!) ───────────────────────────
@@ -325,6 +329,13 @@ def handle_gmail_read(req, plan, hist):
 
 def handle_gmail_send_propose(req, plan, hist):
     """Propose sending an email."""
+    if not req.googleAccessToken:
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your Google account to send emails.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "email"}]
+        )
+        yield sse("done")
+        return
     details = plan["gmail_send_propose"]
     to = details.get("to", "")
     subject = details.get("subject", "")
@@ -375,6 +386,13 @@ def handle_gmail_send(req, plan, hist):
 
 def handle_gmail_reply_propose(req, plan, hist):
     """Propose replying to an email."""
+    if not req.googleAccessToken:
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to reply to emails.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "email"}]
+        )
+        yield sse("done")
+        return
     msg_id = plan["gmail_reply_propose"].get("message_id", "")
     body = plan["gmail_reply_propose"].get("body", "")
     
@@ -476,6 +494,13 @@ def handle_calendar_list(req, plan, hist):
 
 def handle_calendar_create_propose(req, plan, hist):
     """Propose creating a calendar event."""
+    if not req.googleAccessToken:
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to create calendar events.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "calendar"}]
+        )
+        yield sse("done")
+        return
     details = plan["calendar_create_propose"]
     summary = details.get("summary", "")
     start = details.get("start_time", "")
@@ -556,6 +581,13 @@ def handle_tasks_list(req, plan, hist):
 
 def handle_tasks_create_propose(req, plan, hist):
     """Propose creating a task."""
+    if not req.googleAccessToken:
+        yield sse("message", 
+            content="⚠️ Google is not connected. Please connect your account to create tasks.",
+            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
+        )
+        yield sse("done")
+        return
     details = plan["tasks_create_propose"]
     title = details.get("title", "")
     
@@ -597,7 +629,7 @@ def handle_notion_search(req, plan, hist):
     if not req.notionAccessToken:
         yield sse("message", 
             content="⚠️ Notion is not connected. Please connect your account to search pages.",
-            actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
+            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "external"}]
         )
         yield sse("done")
         return
@@ -615,6 +647,13 @@ def handle_notion_search(req, plan, hist):
 
 def handle_notion_add_note_propose(req, plan, hist):
     """Propose adding a note to Notion."""
+    if not req.notionAccessToken:
+        yield sse("message", 
+            content="⚠️ Notion is not connected. Please connect your Notion account first.",
+            actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
+        )
+        yield sse("done")
+        return
     details = plan["notion_add_note_propose"]
     title = details.get("title", "")
     content = details.get("content", "")
@@ -636,7 +675,7 @@ def handle_notion_add_note(req, plan, hist):
     if not req.notionAccessToken:
         yield sse("message", 
             content="⚠️ Notion is not connected.",
-            actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
+            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "external"}]
         )
         yield sse("done")
         return
@@ -670,6 +709,13 @@ def handle_notion_add_note(req, plan, hist):
 
 def handle_slack_send_propose(req, plan, hist):
     """Propose sending a Slack message."""
+    if not req.slackAccessToken:
+        yield sse("message", 
+            content="⚠️ Slack is not connected. Please connect your Slack workspace to send messages.",
+            actions=[{"label": "Connect Slack", "url": "/api/auth/slack", "icon": "slack"}]
+        )
+        yield sse("done")
+        return
     details = plan["slack_send_propose"]
     channel = details.get("channel", "general")
     text = details.get("text", "")
@@ -690,12 +736,8 @@ def handle_slack_send(req, plan, hist):
     """Actually send the Slack message."""
     if not req.slackAccessToken:
         yield sse("message", 
-            content="⚠️ Your Slack account is not connected. Please connect to continue.",
-            actions=[{
-                "label": "Connect Slack", 
-                "icon": "slack", 
-                "url": "/api/auth/connect?connection=slack"
-            }]
+            content="⚠️ Slack is not connected. Please connect your Slack workspace to continue.",
+            actions=[{"label": "Connect Slack", "icon": "slack", "url": "/api/auth/slack"}]
         )
         yield sse("done")
         return
@@ -718,6 +760,71 @@ def handle_slack_send(req, plan, hist):
     yield sse("done")
 
 
+def handle_slack_list_channels(req, plan, hist):
+    """List Slack channels."""
+    if not req.slackAccessToken:
+        yield sse("message", 
+            content="⚠️ Slack is not connected. Please connect your Slack workspace first.",
+            actions=[{"label": "Connect Slack", "url": "/api/auth/slack", "icon": "slack"}]
+        )
+        yield sse("done")
+        return
+
+    yield sse("status", content="Fetching Slack channels...")
+    try:
+        from slack_service import SlackService
+        slack = SlackService(req.slackAccessToken)
+        channels = slack.list_channels()
+        if not channels:
+            yield sse("message", content="No channels found in your Slack workspace.")
+            yield sse("done")
+            return
+
+        summary = call_llm([
+            {"role": "system", "content": "List the Slack channels in a clean organized format. Use bullet points with channel names bolded."},
+            *hist,
+            {"role": "user", "content": f"Channels:\n{json.dumps(channels, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", content=summary)
+    except Exception as e:
+        yield sse("message", content=f"Failed to list channels: {str(e)}")
+    yield sse("done")
+
+
+def handle_slack_history(req, plan, hist):
+    """Fetch recent messages from a Slack channel."""
+    if not req.slackAccessToken:
+        yield sse("message", 
+            content="⚠️ Slack is not connected. Please connect your Slack workspace first.",
+            actions=[{"label": "Connect Slack", "url": "/api/auth/slack", "icon": "slack"}]
+        )
+        yield sse("done")
+        return
+
+    details = plan["slack_history"]
+    channel = details.get("channel", "")
+    limit = details.get("limit", 10)
+    yield sse("status", content=f"Fetching messages from #{channel}...")
+    try:
+        from slack_service import SlackService
+        slack = SlackService(req.slackAccessToken)
+        messages = slack.get_channel_history(channel, limit)
+        if not messages:
+            yield sse("message", content=f"No recent messages in #{channel}.")
+            yield sse("done")
+            return
+
+        summary = call_llm([
+            {"role": "system", "content": "Summarize the recent Slack messages concisely. Format with timestamps and usernames bolded."},
+            *hist,
+            {"role": "user", "content": f"Messages from #{channel}:\n{json.dumps(messages, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", content=summary)
+    except Exception as e:
+        yield sse("message", content=f"Failed to fetch messages: {str(e)}")
+    yield sse("done")
+
+
 # ── Linear search/etc handlers ───────────────────────────────────────────
 
 def handle_linear_search(req, plan, hist):
@@ -725,7 +832,7 @@ def handle_linear_search(req, plan, hist):
     if not req.linearAccessToken:
         yield sse("message", 
             content="⚠️ Linear is not connected. Please connect your account to search issues.",
-            actions=[{"label": "Connect Linear", "url": "/api/auth/connect?connection=linear", "icon": "linear"}]
+            actions=[{"label": "Connect Linear", "url": "/api/auth/linear", "icon": "linear"}]
         )
         yield sse("done")
         return
@@ -753,6 +860,13 @@ def handle_linear_search(req, plan, hist):
 
 def handle_linear_create_propose(req, plan, hist):
     """Propose creating a Linear issue."""
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Linear is not connected. Please connect your Linear account first.",
+            actions=[{"label": "Connect Linear", "url": "/api/auth/linear", "icon": "linear"}]
+        )
+        yield sse("done")
+        return
     details = plan["linear_create_propose"]
     title = details.get("title", "")
     description = details.get("description", "")
@@ -777,7 +891,7 @@ def handle_linear_create(req, plan, hist):
             actions=[{
                 "label": "Connect Linear", 
                 "icon": "linear", 
-                "url": f"/api/auth/connect?connection=linear"
+                "url": "/api/auth/linear"
             }]
         )
         yield sse("done")
@@ -834,7 +948,7 @@ def handle_linear_move_issue(req, plan, hist):
             actions=[{
                 "label": "Connect Linear", 
                 "icon": "linear", 
-                "url": f"/api/auth/connect?connection=linear"
+                "url": "/api/auth/linear"
             }]
         )
         yield sse("done")
@@ -860,7 +974,7 @@ def handle_linear_list_board(req, plan, hist):
             actions=[{
                 "label": "Connect Linear", 
                 "icon": "linear", 
-                "url": f"/api/auth/connect?connection=linear"
+                "url": "/api/auth/linear"
             }]
         )
         yield sse("done")
@@ -1038,6 +1152,12 @@ def run_agent(req: AgentChatRequest):
             return
         if "tasks_create_propose" in plan:
             yield from handle_tasks_create_propose(req, plan, hist)
+            return
+        if "slack_list_channels" in plan:
+            yield from handle_slack_list_channels(req, plan, hist)
+            return
+        if "slack_history" in plan:
+            yield from handle_slack_history(req, plan, hist)
             return
         if "slack_send_propose" in plan:
             yield from handle_slack_send_propose(req, plan, hist)

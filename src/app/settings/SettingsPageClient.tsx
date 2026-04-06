@@ -305,7 +305,7 @@ export default function SettingsPageClient({
                 </div>
               ) : (
                 <a
-                  href="/api/auth/connect?connection=notion"
+                  href="/api/auth/notion"
                   className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
                 >
                   <div className="flex items-center gap-3">
@@ -351,7 +351,7 @@ export default function SettingsPageClient({
                 </div>
               ) : (
                 <a
-                  href="/api/auth/connect?connection=linear"
+                  href="/api/auth/linear"
                   className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
                 >
                   <div className="flex items-center gap-3">

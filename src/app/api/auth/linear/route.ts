@@ -3,8 +3,7 @@ import { cookies } from "next/headers";
 import crypto from "crypto";
 
 /**
- * Direct Slack OAuth v2 — bypasses Auth0 entirely.
- * Redirects user to Slack's authorize URL with user_scope for a user token.
+ * Direct Linear OAuth — bypasses Auth0 entirely.
  */
 export async function GET() {
   const session = await auth0.getSession();
@@ -14,11 +13,11 @@ export async function GET() {
     return Response.redirect(new URL("/api/auth/login", appUrl));
   }
 
-  const clientId = process.env.SLACK_CLIENT_ID!;
+  const clientId = process.env.LINEAR_CLIENT_ID!;
   const state = crypto.randomBytes(32).toString("hex");
 
   const cookieStore = await cookies();
-  cookieStore.set("slack_state", state, {
+  cookieStore.set("linear_state", state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -26,15 +25,17 @@ export async function GET() {
     path: "/",
   });
 
-  const callbackUrl = `${appUrl}/api/auth/slack/callback`;
+  const callbackUrl = `${appUrl}/api/auth/linear/callback`;
 
   const params = new URLSearchParams({
     client_id: clientId,
-    user_scope: "channels:read,channels:history,channels:write,chat:write,groups:read,groups:history,groups:write,team:read",
     redirect_uri: callbackUrl,
+    response_type: "code",
+    scope: "read,write",
     state,
+    prompt: "consent",
   });
 
-  console.log(`[Slack] Direct OAuth for user ${session.user.sub}`);
-  return Response.redirect(`https://slack.com/oauth/v2/authorize?${params}`);
+  console.log(`[Linear] Direct OAuth for user ${session.user.sub}`);
+  return Response.redirect(`https://linear.app/oauth/authorize?${params}`);
 }
