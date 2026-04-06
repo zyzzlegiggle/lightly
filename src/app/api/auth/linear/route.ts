@@ -5,7 +5,9 @@ import crypto from "crypto";
 /**
  * Direct Linear OAuth — bypasses Auth0 entirely.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const returnTo = searchParams.get("returnTo") || "/settings";
   const session = await auth0.getSession();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -18,6 +20,14 @@ export async function GET() {
 
   const cookieStore = await cookies();
   cookieStore.set("linear_state", state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
+  });
+
+  cookieStore.set("linear_return_to", returnTo, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

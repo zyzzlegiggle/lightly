@@ -19,6 +19,9 @@ export async function GET(req: Request) {
   const expectedState = cookieStore.get("notion_state")?.value;
   cookieStore.delete("notion_state");
 
+  const returnTo = cookieStore.get("notion_return_to")?.value || "/settings";
+  cookieStore.delete("notion_return_to");
+
   if (error || !code) {
     console.error(`[Notion Callback] Denied: ${error}`);
     return Response.redirect(`${appUrl}/settings?error=notion_denied`);
@@ -97,7 +100,7 @@ export async function GET(req: Request) {
     }
 
     console.log(`[Notion Callback] ✓ Connected "${workspaceName}" for user ${userId}`);
-    return Response.redirect(`${appUrl}/settings?connected=notion`);
+    return Response.redirect(`${appUrl}${returnTo}`);
 
   } catch (e: any) {
     console.error("[Notion Callback] Error:", e);

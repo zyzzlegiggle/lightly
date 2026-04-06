@@ -20,6 +20,9 @@ export async function GET(req: Request) {
   const expectedState = cookieStore.get("slack_state")?.value;
   cookieStore.delete("slack_state");
 
+  const returnTo = cookieStore.get("slack_return_to")?.value || "/settings";
+  cookieStore.delete("slack_return_to");
+
   if (error || !code) {
     console.error(`[Slack Callback] Denied: ${error}`);
     return Response.redirect(`${appUrl}/settings?error=slack_denied&reason=${encodeURIComponent(error || "unknown")}`);
@@ -100,7 +103,7 @@ export async function GET(req: Request) {
     }
 
     console.log(`[Slack Callback] ✓ Connected workspace "${teamName}" for user ${userId}`);
-    return Response.redirect(`${appUrl}/settings?connected=slack&team=${encodeURIComponent(teamName)}`);
+    return Response.redirect(`${appUrl}${returnTo}`);
 
   } catch (e: any) {
     console.error("[Slack Callback] Error:", e);

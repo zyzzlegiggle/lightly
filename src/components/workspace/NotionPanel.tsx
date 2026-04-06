@@ -52,7 +52,7 @@ export function NotionPanel({ projectId }: NotionPanelProps) {
             Link your Notion workspace to automatically create and sync project notes and documentation.
           </p>
           <a
-            href={`/api/auth/connect?connection=notion&returnTo=/project/${projectId}`}
+            href={`/api/auth/notion?returnTo=/project/${projectId}`}
             className="w-full inline-flex items-center justify-center gap-2 bg-zinc-950 text-white rounded-xl px-4 py-3 text-sm font-bold hover:bg-zinc-800 transition-all shadow-md active:scale-95"
           >
             Connect Notion Account

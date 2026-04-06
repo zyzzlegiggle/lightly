@@ -18,6 +18,9 @@ export async function GET(req: Request) {
   const expectedState = cookieStore.get("linear_state")?.value;
   cookieStore.delete("linear_state");
 
+  const returnTo = cookieStore.get("linear_return_to")?.value || "/settings";
+  cookieStore.delete("linear_return_to");
+
   if (error || !code) {
     console.error(`[Linear Callback] Denied: ${error}`);
     return Response.redirect(`${appUrl}/settings?error=linear_denied`);
@@ -105,7 +108,7 @@ export async function GET(req: Request) {
     }
 
     console.log(`[Linear Callback] ✓ Connected "${orgName}" for user ${userId}`);
-    return Response.redirect(`${appUrl}/settings?connected=linear`);
+    return Response.redirect(`${appUrl}${returnTo}`);
 
   } catch (e: any) {
     console.error("[Linear Callback] Error:", e);
