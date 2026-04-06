@@ -220,8 +220,9 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-zinc-50/50">
         <div className="max-w-md w-full bg-white rounded-2xl border border-zinc-200 p-8 shadow-sm">
           <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-zinc-200">
-             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22" />
+                <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
              </svg>
           </div>
           <h2 className="text-xl font-semibold text-zinc-900 mb-2">Initialize Linear Project</h2>
@@ -256,8 +257,9 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
       <div className="h-14 border-b border-zinc-200 bg-white px-6 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-zinc-950 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="17" x2="12" y2="22" />
+                    <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
                 </svg>
             </div>
             <div>

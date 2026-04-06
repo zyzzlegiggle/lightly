@@ -326,9 +326,10 @@ export default function SettingsPageClient({
               {connectedProviders.includes("linear") ? (
                 <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#5E6AD2] flex items-center justify-center text-white">
-                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                        <path d="M12 2L2 12l10 10 10-10L12 2zm0 18.5L3.5 12 12 3.5l8.5 8.5-8.5 8.5z" />
+                    <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center text-white shadow-sm">
+                      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="17" x2="12" y2="22" />
+                        <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
                       </svg>
                     </div>
                     <div>
