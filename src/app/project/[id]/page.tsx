@@ -370,6 +370,7 @@ export default function WorkspacePage() {
 
         {activeTab === "slack" && <SlackPanel />}
         {activeTab === "linear" && <LinearPanel projectId={projectId} />}
+        {activeTab === "notion" && <NotionPanel projectId={projectId} />}
 
         {/* ── Browser preview ── */}
         <div className="flex-1 overflow-hidden p-3 flex flex-col gap-0">

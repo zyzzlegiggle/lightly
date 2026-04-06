@@ -1,85 +1,214 @@
-# Linear Auth0 Setup Guide
+# Linear Integration — Auth0 Setup Guide
 
-If your Linear integration is automatically connecting to a previous account without letting you choose (or "typing your own"), it's because the Linear OAuth flow sees an active session in your browser.
+> Updated for the current Auth0 Dashboard (2026). The legacy "Custom Social Connections" extension has been **deprecated**. Use the native **Create Custom** option under Authentication → Social instead.
 
-To fix this and re-run the setup, follow these steps:
-
-### 1. Create/Update the Linear OAuth Application
-Go to your [Linear Developer Settings](https://linear.app/settings/api/applications):
-
-*   **App Name**: `Lightly` (or your preferred name)
-*   **Redirect URI**: `https://<YOUR_AUTH0_DOMAIN>/login/callback`
-    *   *Example: `https://dev-brr00af5yadyj4r7.us.auth0.com/login/callback`*
-*   **Copy the Client ID and Client Secret** — you'll need these for Auth0.
+> **Note:** As of April 2026, Linear OAuth applications use **short-lived access tokens with refresh tokens**. Your app should handle token refreshing.
 
 ---
 
-### 2. Configure Auth0 Custom Social Connection
-In your [Auth0 Dashboard](https://manage.auth0.com/), navigate to **Authentication > Extensions**, and check if you have "Custom Social Connections" installed. If not, you can create a connection manually via the API or Extension.
+## Overview
 
-**Fill in these details for the Linear connection:**
+```
+User clicks "Connect Linear"
+  → /api/auth/connect?connection=linear
+  → Auth0 redirects user to Linear OAuth
+  → User authorizes in Linear
+  → Linear redirects to Auth0 /login/callback
+  → Auth0 redirects to /api/auth/connect/callback
+  → Callback extracts Linear token via Management API → stores in DB
+  → On project creation: auto-creates a dedicated Linear Project
+```
 
-*   **Name**: `linear`
-*   **Authorization URL**: `https://linear.app/oauth/authorize?prompt=select_account`
-    *   > [!IMPORTANT]
-    *   The `?prompt=select_account` suffix is what forces Linear to show the account switcher instead of auto-logging you in.
-*   **Token URL**: `https://linear.app/oauth/token`
-*   **Scope**: `read,write`
-*   **Client ID**: `[Your Linear Client ID]`
-*   **Client Secret**: `[Your Linear Client Secret]`
+---
 
-#### 3. Fetch Profile Script (JavaScript)
-Copy and paste this into the **Fetch Profile Script** section in Auth0. This allows Auth0 to identify which Linear user is connecting.
+## Step 1 — Create a Linear OAuth Application
+
+1. Go to **https://linear.app** and log in.
+2. Click your **workspace name** (top-left) → **Settings**.
+3. In the left sidebar under **Account**, click **API**.
+4. Scroll down to **OAuth Applications** → click **Create new OAuth Application**.
+
+### Fill in the fields:
+
+| Field | Value |
+|-------|-------|
+| **Application name** | `Lightly` |
+| **Description** | `AI workspace assistant` |
+| **Developer URL** | `http://localhost:3000` |
+| **Callback URLs** | `https://<YOUR_AUTH0_DOMAIN>/login/callback` |
+
+Example callback URL: `https://dev-abc123.us.auth0.com/login/callback`
+
+> Only the Auth0 domain callback goes here. NOT your app's `localhost` URL.
+
+### Scopes
+Select:
+- ✅ `read`
+- ✅ `write`
+
+### Save & Copy Credentials
+After creating, copy:
+- **Client ID**
+- **Client Secret**
+
+Store these securely — you'll need them for Auth0.
+
+---
+
+## Step 2 — Create Auth0 Custom Social Connection (Linear)
+
+Auth0 does NOT have a built-in Linear connection. You must create a custom one natively.
+
+1. Go to [Auth0 Dashboard](https://manage.auth0.com) → **Authentication** → **Social**.
+2. Click **Create Connection**.
+3. Scroll to the **bottom** of the provider list and click **Create Custom**.
+
+### Fill in the connection form:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `linear` |
+| **Authorization URL** | `https://linear.app/oauth/authorize` |
+| **Token URL** | `https://api.linear.app/oauth/token` |
+| **Scope** | `read write` |
+| **Client ID** | Your Linear Client ID from Step 1 |
+| **Client Secret** | Your Linear Client Secret from Step 1 |
+
+> ⚠️ The name **must** be `linear`. The code uses `connection: "linear"` in `src/app/api/auth/connect/route.ts` line 67.
+
+### Fetch User Profile Script
+
+Paste this into the script editor:
 
 ```javascript
-function profile(accessToken, ctx, cb) {
-  const request = require('request');
-
+function(accessToken, ctx, cb) {
   request.post({
     url: 'https://api.linear.app/graphql',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      'Authorization': 'Bearer ' + accessToken,
       'Content-Type': 'application/json'
     },
-    json: {
-      query: `{
-        viewer {
-          id
-          name
-          email
-          avatarUrl
-        }
-      }`
-    }
-  }, (err, resp, body) => {
+    body: JSON.stringify({
+      query: '{ viewer { id name email avatarUrl } }'
+    })
+  }, function(err, resp, body) {
     if (err) return cb(err);
-    if (resp.statusCode !== 200) return cb(new Error('Linear API returned ' + resp.statusCode));
-    if (!body.data || !body.data.viewer) return cb(new Error('Failed to fetch Linear viewer data'));
-
-    const user = body.data.viewer;
+    var parsed;
+    try { parsed = JSON.parse(body); } catch(e) { return cb(e); }
+    if (resp.statusCode !== 200) {
+      return cb(new Error('Linear API returned ' + resp.statusCode + ': ' + body));
+    }
+    if (!parsed.data || !parsed.data.viewer) {
+      return cb(new Error('Linear did not return viewer data: ' + body));
+    }
+    var user = parsed.data.viewer;
     cb(null, {
       user_id: user.id,
-      name: user.name,
+      name: user.name || 'Linear User',
       email: user.email,
-      picture: user.avatarUrl
+      picture: user.avatarUrl || ''
     });
   });
 }
 ```
 
+### Enable for Your App
+1. After saving, click the **Applications** tab on the connection page.
+2. Toggle **ON** for your Lightly application.
+
 ---
 
-### 4. Code Implementation Check
-Ensure your connection flow in `src/app/api/auth/connect/route.ts` specifies the `linear` connection:
+## Step 3 — Allowed Callback URLs
 
-```typescript
-// ... existing code
-} else if (connection === "linear") {
-    // For Linear API access
-    params.append("connection_scope", "read,write");
-}
-// ...
+Go to **Applications** → **[Your App]** → **Settings**.
+
+In **Allowed Callback URLs**, add (if not already present):
+```
+http://localhost:3000/api/auth/connect/callback, http://localhost:3000/api/auth/callback
 ```
 
-### 5. Final Step: Clear Browser Cookies (Optional)
-If it still auto-logs you in, try visiting [linear.app](https://linear.app) and logging out manually once. Then try the "Connect Linear" button in your app again. The `?prompt=select_account` above should solve it for good though.
+Click **Save Changes**.
+
+> Linear uses the shared `/api/auth/connect/callback` route (same as Notion and Google).
+
+---
+
+## Step 4 — Enable Token Exchange Grant
+
+1. Go to **Applications** → **[Your App]** → **Settings**.
+2. Scroll to **Advanced Settings** → **Grant Types**.
+3. Check **Token Exchange**.
+4. Click **Save Changes**.
+
+---
+
+## Step 5 — Management API Permissions
+
+1. Go to **Applications** → **APIs** → **Auth0 Management API**.
+2. Click the **Machine to Machine Applications** tab.
+3. Find your Lightly app → toggle **Authorized** (ON).
+4. Expand and check:
+   - ✅ `read:users`
+   - ✅ `read:user_idp_tokens`
+5. Click **Update**.
+
+---
+
+## Step 6 — Verify `.env`
+
+```bash
+AUTH0_SECRET=<random-string-at-least-32-chars>
+AUTH0_DOMAIN=dev-abc123.us.auth0.com
+AUTH0_CLIENT_ID=<your-auth0-client-id>
+AUTH0_CLIENT_SECRET=<your-auth0-client-secret>
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+---
+
+## Step 7 — Test
+
+1. Run `npm run dev`.
+2. Log in → go to **Settings** → click **Connect Linear**.
+3. Authorize in Linear.
+4. Check terminal for `[Connect Callback] Got provider token via Management API for linear: ✓`.
+5. You should land back on your app with `?connected=linear` in the URL.
+
+---
+
+## How Auto-Project Creation Works
+
+When a user creates a new project in Lightly and Linear is connected:
+
+1. `POST /api/projects` checks for a stored Linear token.
+2. Fetches the user's first Linear team via GraphQL.
+3. Creates a dedicated Linear project named after the Lightly project.
+4. Stores `linearProjectId` and `linearTeamId` in the database.
+5. The AI agent then scopes all issue creation to this project/team.
+
+This logic is in `src/lib/linear-service.ts` → `createLinearProject()`.
+
+---
+
+## Note: Short-Lived Tokens (April 2026)
+
+As of April 2026, Linear has migrated all OAuth apps to short-lived access tokens with refresh tokens. This means:
+
+- The initial `access_token` from the callback may expire quickly.
+- Your app should handle refreshing tokens when API calls return `401`.
+- The `refresh_token` stored by Auth0 (via the Token Vault or the connect callback) can be used to get a fresh access token.
+
+If you notice Linear API calls failing after some time, you may need to add token refresh logic to the `linear_service.py` backend or the `connect/callback` route.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `linear_denied` redirect | User cancelled, or Callback URL mismatch in Linear app settings. |
+| `linear_no_token` redirect | Management API permissions missing (Step 5). |
+| Linear auto-logs in without account picker | Change Authorization URL to `https://linear.app/oauth/authorize?prompt=select_account` in the custom connection settings. |
+| `viewer` returns null | Access token is invalid or expired. Check Client ID/Secret are correct. |
+| Issues not scoped to project | `linearProjectId` is null — go to the Linear tab in workspace to initialize manually. |
+| `401` from Linear API after some time | Token expired. See "Short-Lived Tokens" note above. |

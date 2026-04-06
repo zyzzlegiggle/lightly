@@ -1,75 +1,179 @@
-# Slack Auth0 Setup Guide
+# Slack Integration — Auth0 Setup Guide
 
-If you're getting an error like "cant read access_token" or "slack_no_token" during the connection flow, it's likely due to one of three missing configurations in your Auth0 dashboard.
-
-To fix this, follow these steps to ensure your Auth0 application has permission to fetch and store Slack tokens.
+> Updated for the current Auth0 Dashboard (2026). The legacy "Custom Social Connections" extension has been **deprecated**. Use the native **Create Custom** option under Authentication → Social instead.
 
 ---
 
-### 1. Create a Slack App for OAuth
-Go to the [Slack App Dashboard](https://api.slack.com/apps):
+## Overview
 
-1.  **Create New App** > From scratch.
-2.  **Redirect URLs**: Add your Auth0 domain callback URL.
-    *   *Example: `https://YOUR_TENANT.us.auth0.com/login/callback`*
-3.  **Permissions (Scopes)**: Add the following **User Token Scopes** (not Bot scopes):
-    *   `openid`, `profile`, `email`, `team:read`
-4.  **Install to Workspace**: Install the app to your own workspace to generate the Client ID and Secret.
-5.  **Copy the Client ID and Client Secret** for the next step.
-
----
-
-### 2. Configure Slack Social Connection in Auth0
-In your [Auth0 Dashboard](https://manage.auth0.com/), navigate to **Authentication > Social**:
-
-1.  **Create Connection** and select **Slack**.
-2.  **Name**: It is recommended to use `sign-in-with-slack` (as used in the code).
-3.  **Client ID & Client Secret**: Paste the credentials from your Slack app.
-4.  **Scopes**: Ensure `openid profile email team:read` are checked.
-5.  **Applications Tab**: Ensure your "Regular Web Application" toggle is **ON** for this connection.
-
----
-
-### 3. Enable Token Exchange (CRITICAL)
-The application uses Auth0's "Federated Token Exchange" to retrieve the Slack token from Auth0's vault.
-
-1.  In Auth0, go to **Applications > [Your App Name] > Settings**.
-2.  Scroll down to **Advanced Settings > Grant Types**.
-3.  Check the box for **Token Exchange**.
-4.  Click **Save Changes**.
-
----
-
-### 4. Configure Management API Permissions (Optional Fallback)
-If the Token Exchange fails, the app attempts to use the Auth0 Management API to read your user identity and extract the `access_token` from there.
-
-1.  Go to **Applications > API > Auth0 Management API**.
-2.  Click the **Machine to Machine Applications** tab.
-3.  Find your application and ensure it is **Authorized**.
-4.  Expand it and ensure these scopes are checked:
-    *   `read:users`
-    *   `read:user_idp_tokens`
-5.  Click **Update**.
-
----
-
-### 5. Troubleshooting: "cant read access_token"
-If you are seeing a literal JavaScript error `Cannot read properties of undefined (reading 'access_token')`, it usually happens because:
-
-1.  **Auth0 Domain/Client ID mismatch**: Ensure `.env` matches the application you configured in Auth0.
-2.  **Management API Setup**: Make sure you have `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, and `AUTH0_CLIENT_SECRET` in your `.env` file. These are used to get a management token to fetch your Slack identity.
-3.  **Connection Name**: The code expects the Slack connection in Auth0 to be named exactly `sign-in-with-slack`. If you named it `slack`, update line 151 in `src/app/api/auth/slack/callback/route.ts` and line 39 in `src/app/api/auth/slack/route.ts`.
-
-```typescript
-// Example: If your connection is named "slack", update this:
-connection: "slack", 
+```
+User clicks "Connect Slack"
+  → /api/auth/slack (builds Auth0 /authorize URL)
+  → Auth0 redirects user to Slack
+  → User authorizes in Slack
+  → Slack redirects to Auth0 /login/callback
+  → Auth0 redirects to /api/auth/slack/callback
+  → Callback extracts Slack token via Management API → stores in DB
 ```
 
 ---
 
-### 6. Verify .env for Slack Callback
-Ensure your `NEXT_PUBLIC_APP_URL` is set correctly in `.env` so Slack knows where to return after authentication:
+## Step 1 — Create a Slack App
+
+1. Go to **https://api.slack.com/apps** → click **Create New App** → **From scratch**.
+2. Give it a name (e.g. `Lightly`) and pick your development workspace.
+
+### Add OAuth Redirect URL
+Go to **OAuth & Permissions** in the left sidebar:
+- Under **Redirect URLs**, click **Add New Redirect URL**:
+  ```
+  https://<YOUR_AUTH0_DOMAIN>/login/callback
+  ```
+  Example: `https://dev-abc123.us.auth0.com/login/callback`
+  
+  > Only the Auth0 domain goes here. NOT your `localhost` URL.
+
+### Add User Token Scopes
+Still in **OAuth & Permissions**, scroll to **User Token Scopes** and add:
+
+| Scope | Why |
+|-------|-----|
+| `openid` | Required for identity |
+| `profile` | User profile |
+| `email` | User email |
+| `team:read` | Read workspace name/ID |
+| `channels:read` | List channels (for sending messages) |
+| `chat:write` | Post messages |
+
+> ⚠️ Add these under **User Token Scopes**, NOT Bot Token Scopes.
+
+### Install & Copy Credentials
+1. Click **Install to Workspace** and authorize.
+2. Go to **Basic Information** → copy the **Client ID** and **Client Secret**.
+
+---
+
+## Step 2 — Create Auth0 Social Connection (Slack)
+
+Auth0 has a built-in "Slack" connection, but it only supports identity scopes (`openid profile email`). Since we need `channels:read` and `chat:write`, we'll use a **Custom Social Connection** instead.
+
+1. Go to [Auth0 Dashboard](https://manage.auth0.com) → **Authentication** → **Social**.
+2. Click **Create Connection**.
+3. Scroll to the **bottom** of the provider list and click **Create Custom**.
+
+### Fill in the connection form:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `sign-in-with-slack` |
+| **Authorization URL** | `https://slack.com/openid/connect/authorize` |
+| **Token URL** | `https://slack.com/api/openid.connect.token` |
+| **Scope** | `openid profile email team:read channels:read chat:write` |
+| **Client ID** | Your Slack Client ID from Step 1 |
+| **Client Secret** | Your Slack Client Secret from Step 1 |
+
+> ⚠️ The name **must** be `sign-in-with-slack`. The code references this name in `src/app/api/auth/slack/route.ts` line 39.
+
+### Fetch User Profile Script
+
+Paste this into the script editor:
+
+```javascript
+function(accessToken, ctx, cb) {
+  request.get({
+    url: 'https://slack.com/api/openid.connect.userInfo',
+    headers: {
+      'Authorization': 'Bearer ' + accessToken
+    }
+  }, function(err, resp, body) {
+    if (err) return cb(err);
+    var profile;
+    try { profile = JSON.parse(body); } catch(e) { return cb(e); }
+    if (!profile.ok) return cb(new Error('Slack userInfo failed: ' + (profile.error || 'unknown')));
+    cb(null, {
+      user_id: profile.sub,
+      name: profile.name || profile.given_name || 'Slack User',
+      email: profile.email,
+      picture: profile.picture || ''
+    });
+  });
+}
+```
+
+### Enable for Your App
+1. After saving, click the **Applications** tab on the connection page.
+2. Toggle **ON** for your Lightly application.
+
+---
+
+## Step 3 — Allowed Callback URLs
+
+Go to **Applications** → **[Your App]** → **Settings**.
+
+In **Allowed Callback URLs**, add:
+```
+http://localhost:3000/api/auth/slack/callback, http://localhost:3000/api/auth/callback
+```
+
+In **Allowed Logout URLs**, add:
+```
+http://localhost:3000
+```
+
+Click **Save Changes**.
+
+---
+
+## Step 4 — Enable Token Exchange Grant
+
+1. Still in **Applications** → **[Your App]** → **Settings**.
+2. Scroll to **Advanced Settings** → **Grant Types**.
+3. Check **Token Exchange**.
+4. Click **Save Changes**.
+
+---
+
+## Step 5 — Management API Permissions (CRITICAL)
+
+This is the most common failure point. The callback route uses the Management API to extract the upstream Slack token from `identities[].access_token`.
+
+1. Go to **Applications** → **APIs** → **Auth0 Management API**.
+2. Click the **Machine to Machine Applications** tab.
+3. Find your Lightly app → toggle **Authorized** (ON).
+4. Expand it and check:
+   - ✅ `read:users`
+   - ✅ `read:user_idp_tokens`
+5. Click **Update**.
+
+---
+
+## Step 6 — Verify `.env`
 
 ```bash
+AUTH0_SECRET=<random-string-at-least-32-chars>
+AUTH0_DOMAIN=dev-abc123.us.auth0.com
+AUTH0_CLIENT_ID=<your-auth0-client-id>
+AUTH0_CLIENT_SECRET=<your-auth0-client-secret>
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
+
+---
+
+## Step 7 — Test
+
+1. Run `npm run dev`.
+2. Log in → go to **Settings** → click **Connect Slack**.
+3. Authorize in Slack.
+4. Check terminal for `[Slack Callback] Got Slack token via Management API ✓`.
+5. You should land on `/settings?connected=slack&team=YourWorkspace`.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `invalid_scope` error | Do NOT include `offline_access`. Only use Slack-native scopes. |
+| `slack_no_token` | Management API permissions missing (Step 5). |
+| `slack_denied` | Callback URL mismatch or user cancelled. Check Step 3. |
+| Connection name mismatch | Update `connection: "sign-in-with-slack"` in `src/app/api/auth/slack/route.ts` line 39 and `callback/route.ts` line 151. |

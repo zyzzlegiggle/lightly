@@ -50,6 +50,7 @@ class AgentChatRequest(BaseModel):
     slackAccessToken: Optional[str] = None
     slackChannelId: Optional[str] = None
     notionAccessToken: Optional[str] = None
+    notionPageId: Optional[str] = None
     linearAccessToken: Optional[str] = None
     linearProjectId: Optional[str] = None
     linearTeamId: Optional[str] = None
@@ -64,8 +65,8 @@ PLAN_PROMPT = (
     "4. **Tasks**: List, create, and update tasks.\n\n"
     "CRITICAL: For any action that MODIFIES user data (Send, Create, Update, Reply), you MUST first use a `_propose` tool call "
     "and wait for the user to click the confirm button. "
-    "Even if a service is ❌ (not connected), you MUST still output the JSON tool call (e.g., `gmail_search`) "
-    "and the system will show the login prompt. NEVER respond with plain text.\n\n"
+    "Even if a service is ❌ (not connected), you MUST still output the JSON tool call (e.g., `gmail_search`, `slack_send_propose`) "
+    "and the system will show the login prompt. NEVER respond with plain text explaining why you can't do it.\n\n"
     "Determine the best action (JSON only):\n"
     "─── GMAIL TOOLS ───\n"
     "Search: {\"gmail_search\": {\"query\": \"...\"}}\n"
@@ -74,9 +75,15 @@ PLAN_PROMPT = (
     "─── CALENDAR TOOLS ───\n"
     "Search/List: {\"calendar_list\": {\"max_results\": 10}}\n"
     "Create (Propose): {\"calendar_create_propose\": {\"summary\": \"...\", \"start_time\": \"ISO-8601\", \"description\": \"...\"}}\n\n"
+    "─── SLACK TOOLS ───\n"
+    "Send (Propose): {\"slack_send_propose\": {\"channel\": \"general\", \"text\": \"...\"}}\n\n"
+    "─── NOTION TOOLS ───\n"
+    "Search: {\"notion_search\": {\"query\": \"...\"}}\n"
+    "Add Note: {\"notion_add_note_propose\": {\"title\": \"...\", \"content\": \"markdown content\"}}\n\n"
     "─── TASKS TOOLS ───\n"
     "List: {\"tasks_list\": {}}\n"
-    "Create (Propose): {\"tasks_create_propose\": {\"title\": \"...\"}}\n\n"
+    "Create (Propose): {\"tasks_create_propose\": {\"title\": \"...\"}}\n"
+    "Update: {\"tasks_update\": {\"task_id\": \"...\", \"status\": \"completed\"}}\n\n"
     "─── CODE TOOL ───\n"
     "Pick files: {\"files_to_read\": [\"path\"], \"plan\": \"brief plan\"}\n\n"
     "Clarify/Chat: {\"clarify\": \"question\", \"plan\": \"\"}"
@@ -606,32 +613,143 @@ def handle_notion_search(req, plan, hist):
         yield sse("message", content=f"Sorry, I couldn't search Notion: {str(e)}")
     yield sse("done")
 
-def handle_notion_create_propose(req, plan, hist):
-    """Propose creating a Notion page."""
-    details = plan["notion_create_propose"]
+def handle_notion_add_note_propose(req, plan, hist):
+    """Propose adding a note to Notion."""
+    details = plan["notion_add_note_propose"]
     title = details.get("title", "")
-    yield sse("message", content=f"Drafting Notion page: **{title}**", 
-              actions=[{"label": "Create Page", "icon": "notion", "tab": "notion", "confirmAction": "notion_create", "params": {"title": title}}])
+    content = details.get("content", "")
+    
+    yield sse("message", 
+        content=f"I'll add this note to your Notion project page:\n\n**Title:** {title}\n\n{content}",
+        actions=[{
+            "label": "Add Note", 
+            "icon": "notion", 
+            "tab": "notion",
+            "confirmAction": "notion_add_note", 
+            "params": {"title": title, "content": content}
+        }]
+    )
     yield sse("done")
 
-def handle_notion_create(req, plan, hist):
-    """Actually create the Notion page after confirmation."""
+def handle_notion_add_note(req, plan, hist):
+    """Actually add the note to the project's Notion page."""
     if not req.notionAccessToken:
         yield sse("message", 
-            content="⚠️ Notion is not connected. Please connect your account to create pages.",
+            content="⚠️ Notion is not connected.",
             actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
         )
         yield sse("done")
         return
-    details = plan["notion_create"]
-    yield sse("status", content=f"Creating page: {details.get('title')}...")
+        
+    if not req.notionPageId:
+        yield sse("message", content="⚠️ Notion project page is not initialized. Please set it up in the Notion tab.")
+        yield sse("done")
+        return
+
+    details = req.message.split(" ", 2)[2] if req.message.startswith("Confirmed: ") else json.dumps(plan["notion_add_note"])
+    params = json.loads(details)
+    
+    yield sse("status", content="Adding note to Notion...")
     try:
         notion = NotionService(req.notionAccessToken)
-        # Assuming a default parent for now, though this usually requires page selection
-        yield sse("message", content=f"✅ Page created (placeholder). To fully implement, we need workspace page selection.")
+        page = notion.create_page(
+            parent_id=req.notionPageId,
+            title=params.get("title"),
+            content=params.get("content", "")
+        )
+        yield sse("message", 
+            content=f"✅ Note added successfully: **{params.get('title')}**.",
+            actions=[{"label": "View in Notion", "url": page.get("url", "https://notion.so"), "icon": "notion", "tab": "notion"}]
+        )
     except Exception as e:
-        yield sse("message", content=f"Failed to create page: {str(e)}")
+        yield sse("message", content=f"Failed to add note: {str(e)}")
     yield sse("done")
+
+
+# ── Slack tool handlers ────────────────────────────────────────────────
+
+def handle_slack_send_propose(req, plan, hist):
+    """Propose sending a Slack message."""
+    details = plan["slack_send_propose"]
+    channel = details.get("channel", "general")
+    text = details.get("text", "")
+    
+    yield sse("message", 
+        content=f"I'll send this message to Slack (**#{channel}**):\n\n{text}",
+        actions=[{
+            "label": "Send Message", 
+            "icon": "slack", 
+            "tab": "slack",
+            "confirmAction": "slack_send", 
+            "params": {"channel": channel, "text": text}
+        }]
+    )
+    yield sse("done")
+
+def handle_slack_send(req, plan, hist):
+    """Actually send the Slack message."""
+    if not req.slackAccessToken:
+        yield sse("message", 
+            content="⚠️ Your Slack account is not connected. Please connect to continue.",
+            actions=[{
+                "label": "Connect Slack", 
+                "icon": "slack", 
+                "url": "/api/auth/connect?connection=slack"
+            }]
+        )
+        yield sse("done")
+        return
+        
+    details = plan["slack_send"]
+    channel = details.get("channel")
+    text = details.get("text")
+    
+    yield sse("status", content=f"Sending message to #{channel}...")
+    try:
+        from slack_service import SlackService
+        slack = SlackService(req.slackAccessToken)
+        slack.post_message(channel, text)
+        yield sse("message", 
+            content=f"✅ Message sent successfully to **#{channel}**.",
+            actions=[{"label": "View in Slack", "tab": "slack", "icon": "slack"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Failed to send Slack message: {str(e)}")
+    yield sse("done")
+
+
+# ── Linear search/etc handlers ───────────────────────────────────────────
+
+def handle_linear_search(req, plan, hist):
+    """Search Linear issues."""
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Linear is not connected. Please connect your account to search issues.",
+            actions=[{"label": "Connect Linear", "url": "/api/auth/connect?connection=linear", "icon": "linear"}]
+        )
+        yield sse("done")
+        return
+
+    query = plan["linear_search"].get("query", "")
+    yield sse("status", content=f"Searching Linear for '{query}'...")
+    try:
+        linear = LinearService(req.linearAccessToken)
+        issues = linear.search_issues(query)
+        if not issues:
+            yield sse("message", content=f"No Linear issues found matching '{query}'.")
+            yield sse("done")
+            return
+            
+        summary = call_llm([
+            {"role": "system", "content": "You are a professional project manager. Summarize the following Linear issues concisely."},
+            *hist,
+            {"role": "user", "content": f"Issues found:\n{json.dumps(issues, indent=2)}\n\nUser request: {req.message}"},
+        ])
+        yield sse("message", content=summary, actions=[{"label": "View Linear Board", "tab": "linear", "icon": "linear"}])
+    except Exception as e:
+        yield sse("message", content=f"Sorry, I couldn't search Linear: {str(e)}")
+    yield sse("done")
+
 
 def handle_linear_create_propose(req, plan, hist):
     """Propose creating a Linear issue."""
@@ -832,12 +950,14 @@ def run_agent(req: AgentChatRequest):
                     yield from handle_calendar_create(req, plan, [])
                 elif action_name == "tasks_create":
                     yield from handle_tasks_create(req, plan, [])
-                elif action_name == "notion_create":
-                    yield from handle_notion_create(req, plan, [])
+                elif action_name == "notion_add_note":
+                    yield from handle_notion_add_note(req, plan, [])
                 elif action_name == "linear_create":
                     yield from handle_linear_create(req, plan, [])
                 elif action_name == "linear_move_issue":
                     yield from handle_linear_move_issue(req, plan, [])
+                elif action_name == "slack_send":
+                    yield from handle_slack_send(req, plan, [])
                 return
             except Exception as e:
                 print(f"[Agent] Confirmation failed: {e}")
@@ -919,11 +1039,14 @@ def run_agent(req: AgentChatRequest):
         if "tasks_create_propose" in plan:
             yield from handle_tasks_create_propose(req, plan, hist)
             return
+        if "slack_send_propose" in plan:
+            yield from handle_slack_send_propose(req, plan, hist)
+            return
         if "notion_search" in plan:
             yield from handle_notion_search(req, plan, hist)
             return
-        if "notion_create_propose" in plan:
-            yield from handle_notion_create_propose(req, plan, hist)
+        if "notion_add_note_propose" in plan:
+            yield from handle_notion_add_note_propose(req, plan, hist)
             return
         if "linear_search" in plan:
             yield from handle_linear_search(req, plan, hist)
@@ -936,6 +1059,9 @@ def run_agent(req: AgentChatRequest):
             return
         if "linear_list_board" in plan:
             yield from handle_linear_list_board(req, plan, hist)
+            return
+        if "notion_add_note" in plan:
+            yield from handle_notion_add_note(req, plan, hist)
             return
         if "calendar_create" in plan:
             yield from handle_calendar_create(req, plan, hist)

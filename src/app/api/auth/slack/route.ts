@@ -35,7 +35,7 @@ export async function GET() {
     client_id: clientId,
     redirect_uri: callbackUrl,
     response_type: "code",
-    scope: "openid profile email offline_access",
+    scope: "openid profile email",
     connection: "sign-in-with-slack",
     state,
   });

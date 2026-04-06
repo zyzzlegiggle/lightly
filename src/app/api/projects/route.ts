@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { project } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { getSlackToken, createSlackChannel, postWelcomeMessage } from "@/lib/slack-service";
+import { getLinearToken, createLinearProject } from "@/lib/linear-service";
+import { getNotionToken, createNotionProjectPage } from "@/lib/notion-service";
 
 export async function GET() {
   const session = await auth0.getSession();
@@ -107,11 +109,43 @@ export async function POST(req: Request) {
         }
       }
     } catch (err) {
-      // Slack is optional — don't fail project creation if it errors
       console.warn("[Projects] Slack channel creation skipped:", err);
     }
 
-    return Response.json({ project: { ...newProject[0], slackChannelId }, liveUrl });
+    // Auto-create a Linear project if the user has Linear connected
+    try {
+      const linearToken = await getLinearToken(userId);
+      if (linearToken) {
+        const linearProject = await createLinearProject(linearToken, name || "New Project", "Dedicated project created by Lightly.");
+        if (linearProject) {
+          await db.update(project)
+            .set({ 
+                linearProjectId: linearProject.projectId,
+                linearTeamId: linearProject.teamId 
+            })
+            .where(eq(project.id, newProject[0].id));
+        }
+      }
+    } catch (err) {
+      console.warn("[Projects] Linear project creation skipped:", err);
+    }
+
+    // Auto-create a Notion page if the user has Notion connected
+    try {
+      const notionToken = await getNotionToken(userId);
+      if (notionToken) {
+        const notionPageId = await createNotionProjectPage(notionToken, name || "New Project");
+        if (notionPageId) {
+          await db.update(project)
+            .set({ notionPageId })
+            .where(eq(project.id, newProject[0].id));
+        }
+      }
+    } catch (err) {
+      console.warn("[Projects] Notion page creation skipped:", err);
+    }
+
+    return Response.json({ project: newProject[0], liveUrl });
 
   } catch (err: any) {
     console.error("Error creating project:", err);

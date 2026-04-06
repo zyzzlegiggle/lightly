@@ -61,7 +61,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       slackAccessToken: slackAccount?.accessToken || null,
       slackChannelId: dbProject.slackChannelId || null,
       notionAccessToken: notionAccount?.accessToken || null,
+      notionPageId: dbProject.notionPageId || null,
       linearAccessToken: linearAccount?.accessToken || null,
+      linearProjectId: dbProject.linearProjectId || null,
+      linearTeamId: dbProject.linearTeamId || null,
     }),
   });
 

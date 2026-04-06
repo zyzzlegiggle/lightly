@@ -282,6 +282,92 @@ export default function SettingsPageClient({
                 </a>
               )}
 
+              {/* Notion */}
+              {connectedProviders.includes("notion") ? (
+                <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center text-white">
+                      {/* Notion Icon */}
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M4.459 4.208c.739-.115 1.304-.153 2.502-.153h12.556c.424 0 .708.038.937.192.229.135.385.405.443.791l.82 5.097c.077.5.077.788-.231.943-.231.115-.539.077-.847-.116l-2.002-1.543c-.424-.328-.847-.482-1.27-.482-.385 0-.616.115-.963.424l-3.35 2.93c-.462.424-.732.559-1.078.559-.308 0-.616-.115-1.001-.424L6.963 8.35c-.231-.193-.539-.308-.885-.308-.424 0-.77.193-.963.539l-1.309 2.564c-.154.308-.347.5-.616.5-.424 0-.578-.347-.578-.713V5.597c0-.771.213-1.253.848-1.389zm13.19 15.65c0 .385-.231.616-.654.616-.231 0-.462-.115-.808-.347l-2.774-1.928c-.385-.27-.693-.424-1.117-.424-.346 0-.654.116-.924.385l-1.617 1.349v-3.778l3.621-2.93c.307-.269.577-.424.962-.424.347 0 .655.154.924.424l2.311 2.311c.23.23.385.5.385.809v3.965z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-text-primary">Notion</p>
+                      <p className="text-xs text-text-muted">Connected for project notes</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
+                      Active
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <a
+                  href="/api/auth/connect?connection=notion"
+                  className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:text-zinc-600 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400 group-hover:text-zinc-700 transition-colors">Connect Notion</p>
+                      <p className="text-xs text-zinc-400">Linked to dedicated project pages</p>
+                    </div>
+                  </div>
+                </a>
+              )}
+
+              {/* Linear */}
+              {connectedProviders.includes("linear") ? (
+                <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-border-subtle">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#5E6AD2] flex items-center justify-center text-white">
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 2L2 12l10 10 10-10L12 2zm0 18.5L3.5 12 12 3.5l8.5 8.5-8.5 8.5z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-text-primary">Linear</p>
+                      <p className="text-xs text-text-muted">Connected for task tracking</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
+                      Active
+                    </div>
+                    <button
+                      onClick={handleDisconnectLinear}
+                      disabled={disconnecting === "linear"}
+                      className="px-2 py-1 text-[10px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                    >
+                      {disconnecting === "linear" ? "..." : "Disconnect"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <a
+                  href="/api/auth/connect?connection=linear"
+                  className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:text-zinc-600 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400 group-hover:text-zinc-700 transition-colors">Connect Linear</p>
+                      <p className="text-xs text-zinc-400">Linked to dedicated project boards</p>
+                    </div>
+                  </div>
+                </a>
+              )}
+
 
 
             </div>

@@ -67,6 +67,7 @@ export const project = pgTable("project", {
 	pendingChanges: jsonb("pendingChanges"),
 	linearProjectId: text("linearProjectId"),
 	linearTeamId: text("linearTeamId"),
+	notionPageId: text("notionPageId"),
 	createdAt: timestamp("createdAt").notNull().defaultNow(),
 	updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
