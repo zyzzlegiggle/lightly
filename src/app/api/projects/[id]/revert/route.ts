@@ -22,7 +22,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { changes } = await req.json();
   const spec = dbProject.appSpecRaw as any;
 
-  const pyResp = await fetch("http://localhost:8000/api/agent/revert", {
+  const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+  const pyResp = await fetch(`${backendUrl}/api/agent/revert`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

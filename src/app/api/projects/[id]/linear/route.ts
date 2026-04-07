@@ -18,7 +18,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // If not initialized, return teams to let user pick (or we pick first)
   if (!dbProject.linearProjectId || !dbProject.linearTeamId) {
-    const teamsResp = await fetch("http://localhost:8000/api/linear/teams", {
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const teamsResp = await fetch(`${backendUrl}/api/linear/teams`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: result.ctx.linearAccessToken })
@@ -28,7 +29,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   // Fetch states and issues
-  const boardResp = await fetch("http://localhost:8000/api/linear/board", {
+  const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+  const boardResp = await fetch(`${backendUrl}/api/linear/board`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
@@ -58,7 +60,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (action === "init") {
     const { teamId, projectName } = body;
-    const initResp = await fetch("http://localhost:8000/api/linear/init", {
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const initResp = await fetch(`${backendUrl}/api/linear/init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -78,7 +81,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (action === "move") {
       const { issueId, stateId } = body;
-      const moveResp = await fetch("http://localhost:8000/api/linear/move", {
+      const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+      const moveResp = await fetch(`${backendUrl}/api/linear/move`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
@@ -92,7 +96,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (action === "create") {
       const { title, description, stateId } = body;
-      const createResp = await fetch("http://localhost:8000/api/linear/create", {
+      const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+      const createResp = await fetch(`${backendUrl}/api/linear/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
