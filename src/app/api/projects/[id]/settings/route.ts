@@ -5,8 +5,9 @@ import { getAuthContextResult } from "@/lib/auth-context";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const result = await getAuthContextResult();
   if (!result.ok) {
     return Response.json(
@@ -16,8 +17,6 @@ export async function PATCH(
   }
 
   const ctx = result.ctx;
-
-  const { id } = params;
   const { envVars } = await req.json();
 
   try {
@@ -58,7 +57,8 @@ export async function PATCH(
       console.log(`[Settings] Syncing new .env to Droplet ${dropletId} at ${dropletIp}...`);
       
       try {
-        const syncResp = await fetch(`http://localhost:8000/api/droplets/${dropletId}/sync`, {
+        const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8000";
+        const syncResp = await fetch(`${backendUrl}/api/droplets/${dropletId}/sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

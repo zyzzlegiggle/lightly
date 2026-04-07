@@ -49,8 +49,8 @@ export async function POST(req: Request) {
     }
 
     // Call Python FastAPI backend to start indexing
-    // GitHub token now comes from Token Vault (short-lived, secure)
-    const pyResp = await fetch("http://localhost:8000/api/projects/sync", {
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8000";
+    const pyResp = await fetch(`${backendUrl}/api/projects/sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ repoId, githubUrl, name, githubToken, envVars: envVars || [] }),

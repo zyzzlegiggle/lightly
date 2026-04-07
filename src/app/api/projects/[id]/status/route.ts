@@ -28,9 +28,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     // Call Python FastAPI backend to get status
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8000";
     let pyResp;
     try {
-      pyResp = await fetch(`http://localhost:8000/api/projects/${dbProject.doAppId}/status`);
+      pyResp = await fetch(`${backendUrl}/api/projects/${dbProject.doAppId}/status`);
     } catch {
       // FastAPI backend unreachable — if we already have a saved URL, return ACTIVE
       if (dbProject.lastPreviewUrl) {
