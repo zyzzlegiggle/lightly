@@ -28,14 +28,16 @@ export function Sidebar({ session, profile, onNewProject }: { session: any; prof
   const displayImage = profile?.image || session.user.picture;
   const displayUsername = profile?.username || session.user.nickname;
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
+   const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [settingsProject, setSettingsProject] = useState<Project | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
   // Fetch projects
-  const fetchProjects = async () => {
+   const fetchProjects = async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/projects");
       if (res.ok) {
@@ -43,6 +45,7 @@ export function Sidebar({ session, profile, onNewProject }: { session: any; prof
         setProjects(data.projects || []);
       }
     } catch { /* silent */ }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchProjects(); }, []);
@@ -163,7 +166,16 @@ export function Sidebar({ session, profile, onNewProject }: { session: any; prof
               )}
             </div>
 
-            {projects.length === 0 ? (
+            {loading ? (
+              <div className="space-y-2 px-2 animate-pulse-subtle">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-2">
+                    <div className="w-6 h-6 rounded-md bg-zinc-100 animate-skeleton" />
+                    <div className="h-3 w-24 bg-zinc-100 rounded animate-skeleton" />
+                  </div>
+                ))}
+              </div>
+            ) : projects.length === 0 ? (
               <div className="px-2 py-3 text-center">
                 <p className="text-xs text-zinc-400">No projects yet</p>
               </div>

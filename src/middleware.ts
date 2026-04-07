@@ -1,7 +1,12 @@
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "./lib/auth0";
 
 export async function middleware(request: NextRequest) {
+  // Explicitly skip preview proxy routes — these must NOT go through auth
+  if (request.nextUrl.pathname.startsWith("/api/preview/")) {
+    return NextResponse.next();
+  }
+
   return await auth0.middleware(request);
 }
 

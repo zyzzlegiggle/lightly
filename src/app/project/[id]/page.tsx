@@ -39,8 +39,20 @@ export default function WorkspacePage() {
 
   const phase = statusData?.phase || "BUILDING";
 
-  // Full iframe src = base URL + current path
-  const iframeSrc = previewUrl ? `${previewUrl.replace(/\/$/, "")}${currentPath}` : null;
+  // ── HTTPS detection (for ngrok proxy) ──
+  const [isHttps, setIsHttps] = useState(false);
+  useEffect(() => {
+    setIsHttps(window.location.protocol === "https:");
+  }, []);
+
+  // If the main app is on HTTPS (ngrok) and the preview is on HTTP, use the local proxy to avoid Mixed Content errors.
+  const useProxy = isHttps && previewUrl?.startsWith("http://");
+  const proxyBase = `/api/preview/${projectId}/`;
+  const iframeSrc = previewUrl
+    ? (useProxy
+      ? `${proxyBase}${currentPath.replace(/^\//, "")}`
+      : `${previewUrl.replace(/\/$/, "")}${currentPath}`)
+    : null;
 
   // Toggle tab — clicking the active tab collapses the panel
   const handleTabChange = useCallback((tab: WorkspaceTab) => {
@@ -286,9 +298,8 @@ export default function WorkspacePage() {
                     <button
                       key={p.id}
                       onClick={() => { router.push(`/project/${p.id}`); setIsSwitcherOpen(false); }}
-                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex flex-col ${
-                        p.id === projectId ? "bg-zinc-50 text-accent-primary font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
-                      }`}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex flex-col ${p.id === projectId ? "bg-zinc-50 text-accent-primary font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                        }`}
                     >
                       <span className="truncate">{p.githubUrl.split("/").pop()?.replace(".git", "")}</span>
                       <span className="text-[10px] text-zinc-400 truncate">{p.githubUrl.replace("https://github.com/", "")}</span>
@@ -307,11 +318,10 @@ export default function WorkspacePage() {
         <div className="ml-auto relative">
           <button
             onClick={() => setIsChangesOpen(!isChangesOpen)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-sm font-semibold ${
-              pendingChanges.length > 0
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-sm font-semibold ${pendingChanges.length > 0
                 ? "bg-zinc-950 text-white border-zinc-900 shadow-md transform hover:scale-105 active:scale-95"
                 : "bg-white text-zinc-400 border-zinc-200 cursor-default opacity-60"
-            }`}
+              }`}
           >
             <div className="relative">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -335,8 +345,8 @@ export default function WorkspacePage() {
                   onDiscard={handleDiscardChange}
                   onDiscardAll={handleDiscardAll}
                   onConfirmAll={async () => {
-                      await handleConfirmAll();
-                      setIsChangesOpen(false);
+                    await handleConfirmAll();
+                    setIsChangesOpen(false);
                   }}
                   isConfirming={isConfirming}
                   isReverting={isReverting}
@@ -368,7 +378,7 @@ export default function WorkspacePage() {
         {activeTab === "gmail" && <GmailPanel />}
         {activeTab === "calendar" && <CalendarPanel />}
 
-        {activeTab === "slack" && <SlackPanel />}
+        {activeTab === "slack" && <SlackPanel projectId={projectId} />}
         {activeTab === "linear" && <LinearPanel projectId={projectId} />}
         {activeTab === "notion" && <NotionPanel projectId={projectId} />}
 
@@ -428,10 +438,25 @@ export default function WorkspacePage() {
               <div className="flex items-center gap-1">
                 {phase === "ACTIVE" && previewUrl && (
                   <>
-                    <button onClick={() => navigator.clipboard.writeText(`${previewUrl}${currentPath}`)} className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors" title="Copy URL">
+                    <button
+                      onClick={() => {
+                        const fullUrl = useProxy
+                          ? `${window.location.origin}${proxyBase}${currentPath.replace(/^\//, "")}`
+                          : `${previewUrl.replace(/\/$/, "")}${currentPath}`;
+                        navigator.clipboard.writeText(fullUrl);
+                      }}
+                      className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors"
+                      title="Copy URL"
+                    >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                     </button>
-                    <a href={`${previewUrl}${currentPath}`} target="_blank" rel="noreferrer" className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors" title="Open in new tab">
+                    <a
+                      href={useProxy ? `${proxyBase}${currentPath.replace(/^\//, "")}` : `${previewUrl}${currentPath}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors"
+                      title="Open in new tab"
+                    >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                     </a>
                   </>
@@ -449,7 +474,7 @@ export default function WorkspacePage() {
                   </div>
                   <h2 className="text-xl font-bold text-zinc-800 mb-1.5">Setting up your sandbox...</h2>
                   <p className="text-zinc-500 text-sm max-w-sm text-center">
-                    {statusData?.logs || "Creating Droplet, cloning repo, installing dependencies..."}
+                    {statusData?.logs || "Installing dependencies..."}
                   </p>
                 </div>
               ) : iframeSrc ? (
@@ -460,6 +485,9 @@ export default function WorkspacePage() {
                     src={iframeSrc}
                     className="w-full h-full border-none bg-white"
                     title="Live Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
+                    allow="clipboard-read; clipboard-write; camera; microphone; geolocation; fullscreen"
+                    referrerPolicy="no-referrer-when-downgrade"
                     onLoad={() => setIframeStatus("ready")}
                     onError={() => { setIframeStatus("error"); setPreviewError("Failed to load preview"); }}
                   />

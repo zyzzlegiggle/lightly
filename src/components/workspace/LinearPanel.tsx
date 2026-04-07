@@ -254,74 +254,60 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-50/50 overflow-hidden relative">
-      <div className="h-14 border-b border-zinc-200 bg-white px-6 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-zinc-950 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="17" x2="12" y2="22" />
-                    <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
-                </svg>
-            </div>
-            <div>
-                <h2 className="text-sm font-bold text-zinc-900">Project Workspace</h2>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Live Sync</span>
-                </div>
-            </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="h-10 border-b border-zinc-200 bg-white px-4 flex items-center justify-between shrink-0">
+        <span className="text-sm font-semibold text-zinc-800">Projects</span>
+        <div className="flex items-center gap-1.5">
             <button 
                 onClick={fetchData}
-                className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-400 hover:text-zinc-600 transition-all"
+                className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-400 hover:text-zinc-600 transition-all"
                 title="Refresh board"
             >
-                <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </button>
             <button 
                 onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-2 bg-zinc-950 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-zinc-800 transition-all shadow-sm active:scale-95"
+                className="flex items-center gap-1.5 bg-zinc-900 text-white px-2.5 py-1 rounded-lg text-[11px] font-semibold hover:bg-zinc-800 transition-all active:scale-95"
             >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-                New Issue
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+                New
             </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto p-6 flex gap-6 items-start">
+      <div className="flex-1 overflow-x-auto p-4 flex gap-4 items-start">
         {columns.map(column => (
           <div 
             key={column.id} 
-            className="w-80 shrink-0 flex flex-col gap-4"
+            className="w-64 shrink-0 flex flex-col gap-3"
             onDragOver={onDragOver}
             onDrop={(e) => onDrop(e, column.id)}
           >
              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full shadow-sm" style={{ backgroundColor: column.color }} />
-                  <span className="text-[11px] font-black text-zinc-500 uppercase tracking-widest">{column.name}</span>
-                  <span className="text-[10px] font-bold text-zinc-400 bg-white px-2 py-0.5 rounded-full border border-zinc-200">
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{column.name}</span>
+                  <span className="text-[9px] font-bold text-zinc-400 bg-white px-1.5 py-0 rounded-full border border-zinc-200">
                     {issues.filter(i => i.state.id === column.id).length}
                   </span>
                 </div>
              </div>
 
-             <div className="flex flex-col gap-2.5 min-h-[500px] border-t border-transparent border-dashed group-hover:border-zinc-200 rounded-xl transition-all">
+              <div className="flex flex-col gap-2 min-h-[200px] border-t border-transparent border-dashed group-hover:border-zinc-200 rounded-xl transition-all">
                 {issues.filter(i => i.state.id === column.id).map(issue => (
                   <div 
                     key={issue.id} 
                     draggable
                     onDragStart={(e) => onDragStart(e, issue.id)}
                     onDragEnd={onDragEnd}
-                    className={`group bg-white border border-zinc-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-zinc-300 transition-all cursor-grab active:cursor-grabbing ${draggedIssueId === issue.id ? 'opacity-40 border-dashed scale-95' : ''}`}
+                    className={`group bg-white border border-zinc-200 p-3 rounded-xl shadow-sm hover:shadow-md hover:border-zinc-300 transition-all cursor-grab active:cursor-grabbing ${draggedIssueId === issue.id ? 'opacity-40 border-dashed scale-95' : ''}`}
                   >
-                    <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-start justify-between mb-1">
                         <span className="text-[10px] font-bold text-zinc-300 tracking-wider">#{issue.identifier}</span>
                         {issue.assignee && (
                           <img src={issue.assignee.avatarUrl} className="w-5 h-5 rounded-full border border-zinc-100 shadow-sm" title={issue.assignee.name} />
                         )}
                     </div>
-                    <p className="text-xs font-semibold text-zinc-800 leading-relaxed mb-4 line-clamp-3 group-hover:text-zinc-950 transition-colors">{issue.title}</p>
+                    <p className="text-[11px] font-semibold text-zinc-800 leading-snug mb-2 line-clamp-2 group-hover:text-zinc-950 transition-colors">{issue.title}</p>
                     
                     <div className="flex items-center justify-between pt-2 border-t border-zinc-50">
                        <div className="flex gap-1.5">
@@ -359,44 +345,44 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-zinc-950/20 backdrop-blur-sm" onClick={() => setIsCreateModalOpen(false)} />
-            <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-zinc-200 overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-8">
-                    <h3 className="text-xl font-bold text-zinc-900 mb-6">New Linear Task</h3>
-                    <form onSubmit={handleCreateIssue} className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest pl-1">Title</label>
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-zinc-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-5">
+                    <h3 className="text-base font-bold text-zinc-900 mb-4">New Task</h3>
+                    <form onSubmit={handleCreateIssue} className="space-y-3">
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider pl-0.5">Title</label>
                             <input 
                                 autoFocus
                                 required
                                 value={newIssueTitle}
                                 onChange={e => setNewIssueTitle(e.target.value)}
-                                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-950 transition-all"
+                                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-zinc-400 transition-all"
                                 placeholder="What needs to be done?"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest pl-1">Description (Optional)</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider pl-0.5">Description</label>
                             <textarea 
                                 value={newIssueDesc}
                                 onChange={e => setNewIssueDesc(e.target.value)}
-                                className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-950 transition-all min-h-[120px] resize-none"
+                                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-zinc-400 transition-all min-h-[80px] resize-none"
                                 placeholder="Add more context..."
                             />
                         </div>
-                        <div className="flex gap-4 pt-4">
+                        <div className="flex gap-3 pt-2">
                             <button 
                                 type="button"
                                 onClick={() => setIsCreateModalOpen(false)}
-                                className="flex-1 px-6 py-4 rounded-2xl text-sm font-bold text-zinc-500 hover:bg-zinc-100 transition-all"
+                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-500 hover:bg-zinc-100 transition-all"
                             >
                                 Cancel
                             </button>
                             <button 
                                 type="submit"
                                 disabled={creatingIssue || !newIssueTitle}
-                                className="flex-[2] bg-zinc-950 text-white px-6 py-4 rounded-2xl text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition-all shadow-lg shadow-zinc-200 active:scale-95"
+                                className="flex-[2] bg-zinc-900 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-800 disabled:opacity-50 transition-all active:scale-95"
                             >
-                                {creatingIssue ? "Creating..." : "Create Task"}
+                                {creatingIssue ? "Creating..." : "Create"}
                             </button>
                         </div>
                     </form>

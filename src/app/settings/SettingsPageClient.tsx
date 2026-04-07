@@ -57,12 +57,18 @@ export default function SettingsPageClient({
   const handleDisconnectGoogle = async () => {
     setDisconnecting("google");
     await fetch("/api/auth/google/disconnect", { method: "DELETE" });
-    window.location.reload(); // Refresh to update providers
+    window.location.reload();
   };
 
   const handleDisconnectLinear = async () => {
     setDisconnecting("linear");
-    await fetch("/api/auth/linear/disconnect", { method: "DELETE" }); // We'll need this route
+    await fetch("/api/auth/linear/disconnect", { method: "DELETE" });
+    window.location.reload();
+  };
+
+  const handleDisconnectNotion = async () => {
+    setDisconnecting("notion");
+    await fetch("/api/auth/notion/disconnect", { method: "DELETE" });
     window.location.reload();
   };
 
@@ -219,6 +225,10 @@ export default function SettingsPageClient({
                     <p className="text-xs text-zinc-400">{slackWorkspaces.length > 0 ? "Link an additional Slack workspace" : "Not linked"}</p>
                   </div>
                 </div>
+                <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
+                  Connect
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                </span>
               </a>
 
               {/* Google / Gmail — checked from DB account table, not session */}
@@ -301,6 +311,13 @@ export default function SettingsPageClient({
                     <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded uppercase tracking-tight border border-emerald-100">
                       Active
                     </div>
+                    <button
+                      onClick={handleDisconnectNotion}
+                      disabled={disconnecting === "notion"}
+                      className="px-2 py-1 text-[10px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                    >
+                      {disconnecting === "notion" ? "..." : "Disconnect"}
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -319,6 +336,10 @@ export default function SettingsPageClient({
                       <p className="text-xs text-zinc-400">Linked to dedicated project pages</p>
                     </div>
                   </div>
+                  <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
+                    Connect
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                  </span>
                 </a>
               )}
 
@@ -366,6 +387,10 @@ export default function SettingsPageClient({
                       <p className="text-xs text-zinc-400">Linked to dedicated project boards</p>
                     </div>
                   </div>
+                  <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
+                    Connect
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                  </span>
                 </a>
               )}
 
