@@ -326,7 +326,7 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
         </div>
 
         {/* Floating Tooltips or simple Toolbar */}
-        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-zinc-50 overflow-x-auto shrink-0 scrollbar-hide bg-zinc-50/30">
+        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-zinc-100 overflow-x-auto shrink-0 scrollbar-hide">
           {BLOCK_TYPES.map((bt) => (
             <button
               key={bt.type}
@@ -340,7 +340,7 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
                 }, 50);
               }}
               title={bt.label}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-white text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all border border-zinc-200/50 shadow-sm shrink-0 active:scale-90"
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 transition-all shrink-0 active:scale-90"
             >
               {bt.icon}
             </button>

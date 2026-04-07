@@ -25,6 +25,63 @@ const SKIP_REQUEST_HEADERS = [
   "sec-fetch-site",
 ];
 
+// ── HMR paths that should return stubs instead of being proxied ──
+const HMR_PATHS = [
+  "@vite/client",
+  "@react-refresh",
+  "__vite_ping",
+  "__vite_hmr",
+  "_next/webpack-hmr",
+];
+
+// ── Stub for /@vite/client — provides CSS injection but no HMR/WebSocket ──
+const VITE_CLIENT_STUB = `
+// Lightly Preview: Vite client stub (HMR disabled in proxy mode)
+export function createHotContext() {
+  return {
+    accept: () => {},
+    acceptExports: () => {},
+    dispose: () => {},
+    prune: () => {},
+    invalidate: () => {},
+    decline: () => {},
+    on: () => {},
+    send: () => {},
+    data: {},
+  };
+}
+export function removeStyle(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+export function createStyle() {}
+export function updateStyle(id, css) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement('style');
+    el.id = id;
+    el.setAttribute('type', 'text/css');
+    document.head.appendChild(el);
+  }
+  el.textContent = css;
+}
+export function injectQuery(url) { return url; }
+`;
+
+// ── Stub for /@react-refresh ──
+const REACT_REFRESH_STUB = `
+// Lightly Preview: React Refresh stub (HMR disabled in proxy mode)
+const RefreshRuntime = {
+  injectIntoGlobalHook: () => {},
+  createSignatureFunctionForTransform: () => (type) => type,
+  isLikelyComponentType: () => false,
+  register: () => {},
+  getFamilyByID: () => undefined,
+  performReactRefresh: () => {},
+};
+export default RefreshRuntime;
+`;
+
 async function resolveTarget(id: string) {
   const dbProject = await db.query.project.findFirst({
     where: eq(project.id, id),
@@ -74,12 +131,31 @@ function buildDownstreamHeaders(
  * Skips: protocol-relative "//", already-proxied "/api/preview/", data URIs
  */
 function rewriteRootRelativePaths(text: string, proxyBase: string): string {
-  // In string literals: '/path', "/path", `/path`
-  // Added '.' to allowed characters for hidden folders like /.vite/
   return text.replace(
     /(['"`])\/(?!\/|api\/preview\/|data:)([.@_\w])/g,
     "$1" + proxyBase + "$2"
   );
+}
+
+/**
+ * Check if a path is an HMR-related request that should be stubbed.
+ */
+function getHmrStub(subPath: string): string | null {
+  // Exact matches
+  if (subPath === "@vite/client" || subPath === "node_modules/.vite/client" || subPath === "node_modules/vite/dist/client/client.mjs") {
+    return VITE_CLIENT_STUB;
+  }
+  if (subPath === "@react-refresh" || subPath.includes("react-refresh")) {
+    return REACT_REFRESH_STUB;
+  }
+  // Prefix matches
+  if (subPath === "__vite_ping" || subPath === "__vite_hmr" || subPath.startsWith("__vite")) {
+    return "// HMR stub\n";
+  }
+  if (subPath === "_next/webpack-hmr") {
+    return "// Webpack HMR stub\n";
+  }
+  return null;
 }
 
 async function handleProxy(
@@ -88,6 +164,21 @@ async function handleProxy(
 ) {
   const { id, path } = await params;
   const subPath = (path ?? []).join("/");
+  const proxyBase = `/api/preview/${id}/`;
+
+  // ── Intercept HMR requests and return stubs ──
+  const hmrStub = getHmrStub(subPath);
+  if (hmrStub) {
+    console.log(`[Proxy] HMR stub: ${subPath}`);
+    return new NextResponse(hmrStub, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }
 
   const targetBase = await resolveTarget(id);
   if (!targetBase) {
@@ -107,7 +198,6 @@ async function handleProxy(
     });
 
     const contentType = response.headers.get("Content-Type") || "";
-    const proxyBase = `/api/preview/${id}/`;
 
     // ── HTML: inject <base>, rewrite URLs, patch runtime APIs ──
     if (contentType.includes("text/html")) {
@@ -128,7 +218,6 @@ async function handleProxy(
       html = html.replace(new RegExp(escapedBase + "/?", "g"), proxyBase);
 
       // Rewrite root-relative URLs in HTML attributes
-      // src="/foo" → src="/api/preview/{id}/foo"
       html = html.replace(
         /((?:src|href|action|poster)\s*=\s*["'])\/(?!\/|api\/preview\/)/gi,
         `$1${proxyBase}`
@@ -152,8 +241,19 @@ async function handleProxy(
         }
       );
 
-      // Inject runtime patches for fetch, XHR, createElement, WebSocket
+      // Strip React Refresh preamble inline scripts
+      html = html.replace(
+        /<script\b[^>]*type\s*=\s*["']module["'][^>]*>[\s\S]*?__vite_plugin_react_preamble_installed__[\s\S]*?<\/script>/gi,
+        `<script type="module">
+          window.$RefreshReg$ = () => {};
+          window.$RefreshSig$ = () => (type) => type;
+          window.__vite_plugin_react_preamble_installed__ = true;
+        </script>`
+      );
+
+      // Inject runtime patches for fetch, XHR, createElement (NO WebSocket patching needed now)
       const patchScript = `
+<style>vite-error-overlay, #webpack-dev-server-client-overlay { display: none !important; }</style>
 <script data-lightly-proxy>
 (function() {
   var P = '${proxyBase}';
@@ -189,54 +289,43 @@ async function handleProxy(
     }
     return el;
   };
-  // WebSocket (HMR) — create a fake WebSocket for dev-server HMR connections
-  // that silently absorbs traffic. Real connections (non-HMR) pass through.
+  // Block ALL WebSocket connections from the proxied iframe.
+  // HMR WebSockets can't work through a reverse proxy, and the stubs above
+  // prevent Vite/Webpack from even trying — this is a safety net.
   var _WS = window.WebSocket;
-  function FakeWS() {
-    this.readyState = 1; // OPEN
-    this.send = function() {};
-    this.close = function() { this.readyState = 3; if (this.onclose) this.onclose({code:1000,reason:'',wasClean:true}); };
-    this.addEventListener = function(t, fn) { if (t === 'open') setTimeout(fn, 0); };
-    this.removeEventListener = function() {};
-    var self = this;
-    setTimeout(function() { if (self.onopen) self.onopen({}); }, 0);
-  }
-  FakeWS.prototype = { CONNECTING:0, OPEN:1, CLOSING:2, CLOSED:3 };
   window.WebSocket = function(url, p) {
     try {
       var u = new URL(url, location.origin);
-      // If the WS target is a different host (i.e. the Droplet), stub it out
-      // This catches Vite/Webpack HMR connections to localhost / droplet IPs
-      if (u.hostname !== location.hostname || (u.port && u.port !== location.port)) {
-        return new FakeWS();
+      // Allow WebSocket to truly external services (e.g. Firebase, Supabase, Pusher)
+      // Block connections to: localhost, private IPs, or the proxy host itself
+      var h = u.hostname;
+      if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' ||
+          h === location.hostname || /^10\\./.test(h) || /^172\\.(1[6-9]|2\\d|3[01])\\./.test(h) ||
+          /^192\\.168\\./.test(h)) {
+        console.debug('[Lightly] Blocked HMR WebSocket to', url);
+        // Return a fake WebSocket that pretends to connect
+        var fake = { readyState: 1, send: function(){}, close: function(){this.readyState=3;},
+          addEventListener: function(t,fn){if(t==='open')setTimeout(fn,0);},
+          removeEventListener: function(){}, onopen:null, onclose:null, onmessage:null, onerror:null };
+        setTimeout(function(){ if(fake.onopen) fake.onopen({}); }, 0);
+        return fake;
       }
-    } catch(e) { return new FakeWS(); }
+    } catch(e) {}
     return p ? new _WS(url, p) : new _WS(url);
   };
   window.WebSocket.prototype = _WS.prototype;
-  window.WebSocket.CONNECTING = 0;
-  window.WebSocket.OPEN = 1;
-  window.WebSocket.CLOSING = 2;
-  window.WebSocket.CLOSED = 3;
-  // Suppress HMR / Vite console noise
-  var _ce2 = console.error;
-  console.error = function() { var m = arguments[0]; if (typeof m === 'string' && (m.includes('WebSocket') || m.includes('[hmr]') || m.includes('[vite]') || m.includes('hot update'))) return; return _ce2.apply(this, arguments); };
-  var _cw = console.warn;
-  console.warn = function() { var m = arguments[0]; if (typeof m === 'string' && (m.includes('WebSocket') || m.includes('[hmr]') || m.includes('[vite]') || m.includes('hot update'))) return; return _cw.apply(this, arguments); };
-  // Hide Vite/Webpack error overlays that may show connection errors
-  var _raf = requestAnimationFrame;
-  (function hideOverlays() {
-    var overlays = document.querySelectorAll('vite-error-overlay, #webpack-dev-server-client-overlay');
-    overlays.forEach(function(el) { el.remove(); });
-    _raf(hideOverlays);
-  })();
+  window.WebSocket.CONNECTING = 0; window.WebSocket.OPEN = 1;
+  window.WebSocket.CLOSING = 2; window.WebSocket.CLOSED = 3;
 })();
 </script>`;
 
-      if (html.includes("</head>")) {
+      // Inject the patch as the FIRST thing after <head> and <base> tag (before any other scripts)
+      if (html.includes(baseTag)) {
+        html = html.replace(baseTag, baseTag + patchScript);
+      } else if (html.includes("</head>")) {
         html = html.replace("</head>", patchScript + "</head>");
       } else {
-        html += patchScript;
+        html = patchScript + html;
       }
 
       return new NextResponse(html, {
@@ -255,7 +344,6 @@ async function handleProxy(
     const isBinary = BINARY_TYPES.some(t => contentType.includes(t)) || BINARY_EXTS.includes(ext);
 
     if (isBinary) {
-      // Stream binary through without modification
       return new NextResponse(response.body, {
         status: response.status,
         headers: buildDownstreamHeaders(response),
@@ -270,7 +358,6 @@ async function handleProxy(
     text = text.replace(new RegExp(escapedBase + "/?", "g"), proxyBase);
 
     // Rewrite all root-relative paths in string literals
-    // Catches: "/node_modules/...", "/src/...", "/@vite/...", "/_next/...", etc.
     text = rewriteRootRelativePaths(text, proxyBase);
 
     // Rewrite webpack public path if present

@@ -63,3 +63,27 @@ export async function createLinearProject(token: string, name: string, descripti
 
   return null;
 }
+export async function listLinearProjects(token: string) {
+  const resp = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `
+        query {
+          projects {
+            nodes { 
+              id name description updatedAt
+              teams { nodes { id name key } }
+            }
+          }
+        }
+      `,
+    }),
+  });
+
+  const data = await resp.json();
+  return data?.data?.projects?.nodes || [];
+}
