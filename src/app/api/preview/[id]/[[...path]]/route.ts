@@ -42,6 +42,8 @@ function buildUpstreamHeaders(req: NextRequest) {
     }
   });
   h["Accept"] = req.headers.get("Accept") || "*/*";
+  // Bypass ngrok interstitial if targeting an ngrok URL
+  h["ngrok-skip-browser-warning"] = "true";
   return h;
 }
 
@@ -73,8 +75,9 @@ function buildDownstreamHeaders(
  */
 function rewriteRootRelativePaths(text: string, proxyBase: string): string {
   // In string literals: '/path', "/path", `/path`
+  // Added '.' to allowed characters for hidden folders like /.vite/
   return text.replace(
-    /(['"`])\/(?!\/|api\/preview\/|data:)([@_\w])/g,
+    /(['"`])\/(?!\/|api\/preview\/|data:)([.@_\w])/g,
     "$1" + proxyBase + "$2"
   );
 }
