@@ -22,13 +22,13 @@ export async function GET(req: Request) {
   // Must be logged in already
   const session = await auth0.getSession();
   if (!session?.user) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
     return Response.redirect(`${appUrl}/api/auth/login`);
   }
 
   const domain = process.env.AUTH0_DOMAIN!;
   const clientId = process.env.AUTH0_CLIENT_ID!;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
 
   // Generate a CSRF state token
   const state = crypto.randomBytes(32).toString("hex");

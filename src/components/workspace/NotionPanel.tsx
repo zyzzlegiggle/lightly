@@ -24,15 +24,15 @@ interface NotionPanelProps {
 
 type BlockType = "paragraph" | "heading_2" | "heading_3" | "bulleted_list_item" | "numbered_list_item" | "to_do" | "code" | "divider";
 
-const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
-  { type: "paragraph", label: "Text", icon: "T" },
-  { type: "heading_2", label: "H2", icon: "H2" },
-  { type: "heading_3", label: "H3", icon: "H3" },
-  { type: "bulleted_list_item", label: "Bullet", icon: "•" },
-  { type: "numbered_list_item", label: "Number", icon: "1." },
-  { type: "to_do", label: "Todo", icon: "☐" },
-  { type: "code", label: "Code", icon: "</>" },
-  { type: "divider", label: "Line", icon: "—" },
+const BLOCK_TYPES: { type: BlockType; label: string; icon: React.ReactNode }[] = [
+  { type: "paragraph", label: "Text", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16m-7 6h7" /></svg> },
+  { type: "heading_2", label: "Heading 2", icon: <span className="text-[10px] font-black">H2</span> },
+  { type: "heading_3", label: "Heading 3", icon: <span className="text-[10px] font-black">H3</span> },
+  { type: "bulleted_list_item", label: "Bullet List", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg> },
+  { type: "numbered_list_item", label: "Numbered List", icon: <span className="text-[10px] font-black italic">1.</span> },
+  { type: "to_do", label: "Todo List", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg> },
+  { type: "code", label: "Code Block", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg> },
+  { type: "divider", label: "Divider", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 12H4" /></svg> },
 ];
 
 function formatDate(dateStr: string) {
@@ -326,7 +326,7 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
         </div>
 
         {/* Floating Tooltips or simple Toolbar */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-zinc-50 overflow-x-auto shrink-0 scrollbar-hide">
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-zinc-50 overflow-x-auto shrink-0 scrollbar-hide bg-zinc-50/30">
           {BLOCK_TYPES.map((bt) => (
             <button
               key={bt.type}
@@ -339,10 +339,10 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
                   textarea?.focus();
                 }, 50);
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-50 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all text-[11px] font-medium border border-zinc-100 whitespace-nowrap"
+              title={bt.label}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-white text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all border border-zinc-200/50 shadow-sm shrink-0 active:scale-90"
             >
-              <span className="opacity-60">{bt.icon}</span>
-              {bt.label}
+              {bt.icon}
             </button>
           ))}
         </div>

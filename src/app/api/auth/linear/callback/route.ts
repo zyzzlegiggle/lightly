@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
  * Direct Linear OAuth callback — exchanges code with Linear's API.
  */
 export async function GET(req: Request) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");

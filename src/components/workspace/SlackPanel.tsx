@@ -137,8 +137,6 @@ function renderSlackText(text: string) {
   return result;
 }
 
-type PanelMode = "channels" | "people";
-
 export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [channels, setChannels] = useState<SlackChannel[]>([]);
@@ -154,7 +152,6 @@ export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
   const [newChannelName, setNewChannelName] = useState("");
   const [creating, setCreating] = useState(false);
   const [showAllChannels, setShowAllChannels] = useState(false);
-  const [mode, setMode] = useState<PanelMode>("channels");
   const [mentionItems, setMentionItems] = useState<{ type: "notion" | "linear"; id: string; title: string; url: string }[]>([]);
   const [loadingMentions, setLoadingMentions] = useState(false);
 
@@ -388,44 +385,27 @@ export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
       <div className="w-[340px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0">
         {/* Header */}
         <div className="h-10 border-b border-zinc-100 flex items-center justify-between px-3 shrink-0">
-          <div className="flex bg-zinc-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setMode("channels")}
-              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${mode === "channels" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
-            >
-              Channels
-            </button>
-            <button
-              onClick={() => setMode("people")}
-              className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${mode === "people" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
-            >
-              People
-            </button>
-          </div>
+          <span className="text-sm font-bold text-zinc-800">Messages</span>
           <div className="flex items-center gap-1">
-            {mode === "channels" && (
-              <>
-                <button
-                  onClick={() => { setShowAllChannels(!showAllChannels); if (!showAllChannels) loadAllChannels(); }}
-                  className="text-[10px] text-zinc-400 hover:text-zinc-700 px-2 py-1 rounded-lg hover:bg-zinc-100 transition-all font-medium"
-                >
-                  {showAllChannels ? "Project" : "All"}
-                </button>
-                <button
-                  onClick={() => setShowCreateChannel(true)}
-                  className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => { setShowAllChannels(!showAllChannels); if (!showAllChannels) loadAllChannels(); }}
+              className="text-[10px] text-zinc-400 hover:text-zinc-700 px-2 py-1 rounded-lg hover:bg-zinc-100 transition-all font-medium"
+            >
+              {showAllChannels ? "Project" : "All"}
+            </button>
+            <button
+              onClick={() => setShowCreateChannel(true)}
+              className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
           </div>
         </div>
 
         {/* Create channel inline */}
-        {showCreateChannel && mode === "channels" && (
+        {showCreateChannel && (
           <div className="p-3 border-b border-zinc-100 space-y-2">
             <input
               autoFocus
@@ -456,66 +436,71 @@ export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
         <div className="flex-1 overflow-y-auto">
           {loadingMentions && mentionItems.length === 0 ? (
             <SidebarSkeleton />
-          ) : mode === "channels" ? (
-            (showAllChannels ? allChannels : channels).length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
-                <svg className="w-8 h-8 text-zinc-100 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                </svg>
-                <p className="text-xs text-zinc-400 mb-3">
-                  {showAllChannels ? "No channels found" : "No channels for this project"}
-                </p>
-                <button
-                  onClick={() => setShowCreateChannel(true)}
-                  className="text-xs text-zinc-500 hover:text-zinc-800 border border-zinc-200 px-3 py-1.5 rounded-lg transition-all"
-                >
-                  Create a channel
-                </button>
-              </div>
-            ) : (
-              <div className="py-1">
-                {(showAllChannels ? allChannels : channels).map((ch) => (
-                  <button
-                    key={ch.id}
-                    onClick={() => setActiveChannel(ch)}
-                    className="w-full text-left px-3 py-2 hover:bg-zinc-50 transition-colors group flex items-center gap-2"
-                  >
-                    <span className="text-zinc-300 text-xs font-mono">#</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-zinc-700 group-hover:text-zinc-900 truncate">
-                        {ch.name}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )
           ) : (
-            <div className="py-1">
-              {users.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => startDMWithUser(u)}
-                  className="w-full text-left px-3 py-2 hover:bg-zinc-50 transition-colors group flex items-center gap-2.5"
-                >
-                  {u.avatar ? (
-                    <img src={u.avatar} alt="" className="w-5 h-5 rounded-md object-cover" />
-                  ) : (
-                    <div className="w-5 h-5 rounded-md bg-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-500">
-                      {u.name[0]}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-medium text-zinc-700 group-hover:text-zinc-900 truncate">
-                      {u.name}
-                    </p>
-                    {u.status && (
-                      <p className="text-[10px] text-zinc-400 truncate -mt-0.5">{u.status}</p>
-                    )}
+            <>
+              {/* Channels Section */}
+              <div className="py-2">
+                <div className="px-3 py-1 mb-1">
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Channels</p>
+                </div>
+                {(showAllChannels ? allChannels : channels).length === 0 ? (
+                  <div className="px-3 py-4 text-center text-zinc-400 text-[10px]">
+                    No channels found
                   </div>
-                </button>
-              ))}
-            </div>
+                ) : (
+                  (showAllChannels ? allChannels : channels).map((ch) => (
+                    <button
+                      key={ch.id}
+                      onClick={() => setActiveChannel(ch)}
+                      className="w-full text-left px-3 py-2 hover:bg-zinc-50 transition-colors group flex items-center gap-2"
+                    >
+                      <span className="text-zinc-300 text-xs font-mono">#</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium text-zinc-700 group-hover:text-zinc-900 truncate">
+                          {ch.name}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* People Section */}
+              <div className="py-2 border-t border-zinc-50">
+                <div className="px-3 py-1 mb-1">
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Direct Messages</p>
+                </div>
+                {users.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-zinc-400 text-[10px]">
+                    No people found
+                  </div>
+                ) : (
+                  users.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => startDMWithUser(u)}
+                      className="w-full text-left px-3 py-2 hover:bg-zinc-50 transition-colors group flex items-center gap-2.5"
+                    >
+                      {u.avatar ? (
+                        <img src={u.avatar} alt="" className="w-5 h-5 rounded-md object-cover" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-md bg-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-500">
+                          {u.name[0]}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium text-zinc-700 group-hover:text-zinc-900 truncate">
+                          {u.name}
+                        </p>
+                        {u.status && (
+                          <p className="text-[10px] text-zinc-400 truncate -mt-0.5">{u.status}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -612,7 +597,7 @@ export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
       {/* Message input */}
       <div className="p-3 bg-white border-t border-zinc-100 shrink-0 relative">
         {/* Mention Menu */}
-        {mode === "channels" && messageInput.includes("@") && (
+        {messageInput.includes("@") && (
           <MentionMenu 
             items={mentionItems}
             loading={loadingMentions}

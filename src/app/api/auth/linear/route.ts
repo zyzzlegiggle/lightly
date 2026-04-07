@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const returnTo = searchParams.get("returnTo") || "/settings";
   const session = await auth0.getSession();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
 
   if (!session?.user) {
     return Response.redirect(new URL("/api/auth/login", appUrl));

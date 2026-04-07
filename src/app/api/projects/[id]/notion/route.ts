@@ -237,28 +237,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           return {
             object: "block",
             type: "heading_2",
-            heading_2: { rich_text: [{ text: { content: b.content || "" } }] },
+            heading_2: { rich_text: parseRichText(b.content || "") },
           };
         }
         if (b.type === "heading_3") {
           return {
             object: "block",
             type: "heading_3",
-            heading_3: { rich_text: [{ text: { content: b.content || "" } }] },
+            heading_3: { rich_text: parseRichText(b.content || "") },
           };
         }
         if (b.type === "bulleted_list_item") {
           return {
             object: "block",
             type: "bulleted_list_item",
-            bulleted_list_item: { rich_text: [{ text: { content: b.content || "" } }] },
+            bulleted_list_item: { rich_text: parseRichText(b.content || "") },
           };
         }
         if (b.type === "numbered_list_item") {
           return {
             object: "block",
             type: "numbered_list_item",
-            numbered_list_item: { rich_text: [{ text: { content: b.content || "" } }] },
+            numbered_list_item: { rich_text: parseRichText(b.content || "") },
           };
         }
         if (b.type === "to_do") {
@@ -266,7 +266,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             object: "block",
             type: "to_do",
             to_do: {
-              rich_text: [{ text: { content: b.content || "" } }],
+              rich_text: parseRichText(b.content || ""),
               checked: b.checked || false,
             },
           };
@@ -288,7 +288,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return {
           object: "block",
           type: "paragraph",
-          paragraph: { rich_text: [{ text: { content: b.content || "" } }] },
+          paragraph: { rich_text: parseRichText(b.content || "") },
         };
       });
 
@@ -329,7 +329,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return Response.json({ error: "Invalid action" }, { status: 400 });
 }
 
-/** Extract plain text from a Notion block */
+/** Extract plain text from a Notion block, preserving bold/italic/code as markdown syntax */
 function extractBlockText(block: any): string {
   const type = block.type;
   const data = block[type];
@@ -337,7 +337,13 @@ function extractBlockText(block: any): string {
   
   // Standard text-based blocks (paragraph, headings, lists, etc)
   if (data.rich_text && Array.isArray(data.rich_text)) {
-    return data.rich_text.map((t: any) => t.plain_text || "").join("");
+    return data.rich_text.map((t: any) => {
+      let text = t.plain_text || "";
+      if (t.annotations?.bold) text = `**${text}**`;
+      if (t.annotations?.italic) text = `_${text}_`;
+      if (t.annotations?.code) text = `\`${text}\``;
+      return text;
+    }).join("");
   }
   
   // Old style or other nested text fields
@@ -349,4 +355,28 @@ function extractBlockText(block: any): string {
   if (typeof data === "string") return data;
   
   return "";
+}
+
+/** Simple parser to convert markdown markers to Notion rich_text objects */
+function parseRichText(text: string) {
+  if (!text) return [{ text: { content: "" } }];
+  
+  // Pattern to match **bold**, _italic_, or `code`
+  const regex = /(\*\*.*?\*\*|_.*?_|`.*?`)/g;
+  const parts = text.split(regex);
+  
+  const result = parts.map(part => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return { text: { content: part.slice(2, -2) }, annotations: { bold: true } };
+    }
+    if (part.startsWith("_") && part.endsWith("_")) {
+      return { text: { content: part.slice(1, -1) }, annotations: { italic: true } };
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return { text: { content: part.slice(1, -1) }, annotations: { code: true } };
+    }
+    return { text: { content: part } };
+  }).filter(p => !!p.text.content);
+
+  return result.length > 0 ? result : [{ text: { content: "" } }];
 }

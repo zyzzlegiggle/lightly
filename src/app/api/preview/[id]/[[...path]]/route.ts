@@ -189,20 +189,47 @@ async function handleProxy(
     }
     return el;
   };
-  // WebSocket (HMR)
+  // WebSocket (HMR) — create a fake WebSocket for dev-server HMR connections
+  // that silently absorbs traffic. Real connections (non-HMR) pass through.
   var _WS = window.WebSocket;
+  function FakeWS() {
+    this.readyState = 1; // OPEN
+    this.send = function() {};
+    this.close = function() { this.readyState = 3; if (this.onclose) this.onclose({code:1000,reason:'',wasClean:true}); };
+    this.addEventListener = function(t, fn) { if (t === 'open') setTimeout(fn, 0); };
+    this.removeEventListener = function() {};
+    var self = this;
+    setTimeout(function() { if (self.onopen) self.onopen({}); }, 0);
+  }
+  FakeWS.prototype = { CONNECTING:0, OPEN:1, CLOSING:2, CLOSED:3 };
   window.WebSocket = function(url, p) {
-    try { var u = new URL(url); if (u.hostname !== location.hostname) { u.hostname = location.hostname; u.port = location.port; u.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'; url = u.toString(); } } catch(e) {}
+    try {
+      var u = new URL(url, location.origin);
+      // If the WS target is a different host (i.e. the Droplet), stub it out
+      // This catches Vite/Webpack HMR connections to localhost / droplet IPs
+      if (u.hostname !== location.hostname || (u.port && u.port !== location.port)) {
+        return new FakeWS();
+      }
+    } catch(e) { return new FakeWS(); }
     return p ? new _WS(url, p) : new _WS(url);
   };
   window.WebSocket.prototype = _WS.prototype;
-  window.WebSocket.CONNECTING = _WS.CONNECTING;
-  window.WebSocket.OPEN = _WS.OPEN;
-  window.WebSocket.CLOSING = _WS.CLOSING;
-  window.WebSocket.CLOSED = _WS.CLOSED;
-  // Suppress HMR noise
+  window.WebSocket.CONNECTING = 0;
+  window.WebSocket.OPEN = 1;
+  window.WebSocket.CLOSING = 2;
+  window.WebSocket.CLOSED = 3;
+  // Suppress HMR / Vite console noise
   var _ce2 = console.error;
-  console.error = function() { var m = arguments[0]; if (typeof m === 'string' && (m.includes('WebSocket') || m.includes('[hmr]') || m.includes('[vite]'))) return; return _ce2.apply(this, arguments); };
+  console.error = function() { var m = arguments[0]; if (typeof m === 'string' && (m.includes('WebSocket') || m.includes('[hmr]') || m.includes('[vite]') || m.includes('hot update'))) return; return _ce2.apply(this, arguments); };
+  var _cw = console.warn;
+  console.warn = function() { var m = arguments[0]; if (typeof m === 'string' && (m.includes('WebSocket') || m.includes('[hmr]') || m.includes('[vite]') || m.includes('hot update'))) return; return _cw.apply(this, arguments); };
+  // Hide Vite/Webpack error overlays that may show connection errors
+  var _raf = requestAnimationFrame;
+  (function hideOverlays() {
+    var overlays = document.querySelectorAll('vite-error-overlay, #webpack-dev-server-client-overlay');
+    overlays.forEach(function(el) { el.remove(); });
+    _raf(hideOverlays);
+  })();
 })();
 </script>`;
 
