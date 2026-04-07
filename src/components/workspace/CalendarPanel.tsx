@@ -239,7 +239,7 @@ export function CalendarPanel({ refreshKey }: CalendarPanelProps) {
   return (
     <div className="w-[360px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0">
       {/* Header */}
-      <div className="h-12 border-b border-zinc-100 flex items-center justify-between px-4 shrink-0">
+      <div className="h-12 border-b border-zinc-100 flex items-center justify-between px-4 shrink-0 font-sans">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setViewDate(new Date(year, month - 1, 1))}
@@ -261,15 +261,26 @@ export function CalendarPanel({ refreshKey }: CalendarPanelProps) {
             </svg>
           </button>
         </div>
-        <button
-          onClick={() => openNewForm()}
-          className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 px-2.5 py-1.5 rounded-lg transition-all"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-          </svg>
-          Add
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => fetchEvents()}
+            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all"
+            title="Refresh events"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            onClick={() => openNewForm()}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 px-2.5 py-1.5 rounded-lg transition-all"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+            </svg>
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Calendar grid or Loading */}

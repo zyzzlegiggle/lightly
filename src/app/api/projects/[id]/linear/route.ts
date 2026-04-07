@@ -40,19 +40,25 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const projectId = searchParams.get("projectId") || dbProject.linearProjectId;
 
-  // Fetch states and issues
+  // Fetch states, issues, and members
   const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
-  const boardResp = await fetch(`${backendUrl}/api/linear/board`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-          token: result.ctx.linearAccessToken,
-          teamId: dbProject.linearTeamId,
-          projectId
+  const [boardResp, membersResp] = await Promise.all([
+      fetch(`${backendUrl}/api/linear/board`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: result.ctx.linearAccessToken, teamId: dbProject.linearTeamId, projectId })
+      }),
+      fetch(`${backendUrl}/api/linear/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: result.ctx.linearAccessToken, teamId: dbProject.linearTeamId })
       })
-  });
+  ]);
   
-  return Response.json(await boardResp.json());
+  const boardData = await boardResp.json();
+  const membersData = await membersResp.json();
+  
+  return Response.json({ ...boardData, ...membersData });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -92,26 +98,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   if (action === "move") {
-      const { issueId, stateId } = body;
+    const { issueId, stateId } = body;
+    if (!issueId || !stateId) {
+      return Response.json({ error: "Missing issueId or stateId" }, { status: 400 });
+    }
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const moveResp = await fetch(`${backendUrl}/api/linear/move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: result.ctx.linearAccessToken, issueId, stateId }),
+    });
+    return Response.json(await moveResp.json());
+  }
+
+  if (action === "update") {
+      const { issueId, title, assigneeId, dueDate } = body;
       const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
-      const moveResp = await fetch(`${backendUrl}/api/linear/move`, {
-          method: "POST",
+      const updateResp = await fetch(`${backendUrl}/api/linear/update`, {
+          method: "POST", // Actually I'll use /api/linear/update if I add it to agent-backend
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
               token: result.ctx.linearAccessToken,
               issueId,
-              stateId
+              title,
+              assigneeId,
+              dueDate
           })
       });
-      return Response.json(await moveResp.json());
+      return Response.json(await updateResp.json());
   }
 
   if (action === "create") {
-      const { title, description, stateId } = body;
+      const { title, description, stateId, assigneeId, dueDate } = body;
       if (!dbProject.linearTeamId || !dbProject.linearProjectId) {
           return Response.json({ error: "linear_not_linked" }, { status: 400 });
       }
       const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+      
+      // We need to update agent-backend's create_issue call to support more fields
       const createResp = await fetch(`${backendUrl}/api/linear/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -121,7 +145,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               projectId: dbProject.linearProjectId,
               title,
               description,
-              stateId: stateId || undefined
+              stateId,
+              assigneeId,
+              dueDate
           })
       });
       return Response.json(await createResp.json());

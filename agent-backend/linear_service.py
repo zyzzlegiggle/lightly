@@ -69,7 +69,7 @@ class LinearService:
               nodes { 
                 id title identifier url priority
                 state { id name color type }
-                assignee { id name avatarUrl }
+                assignees { nodes { id name avatarUrl } }
               }
             }
           }
@@ -78,11 +78,11 @@ class LinearService:
         data = self._query(query, {"projectId": project_id})
         return data.get("project", {}).get("issues", {}).get("nodes", [])
 
-    def create_issue(self, team_id: str, title: str, description: str = "", project_id: Optional[str] = None, state_id: Optional[str] = None) -> Dict:
+    def create_issue(self, team_id: str, title: str, description: str = "", project_id: Optional[str] = None, state_id: Optional[str] = None, assignee_id: Optional[str] = None, due_date: Optional[str] = None) -> Dict:
         """Create a new issue in Linear."""
         mutation = """
-        mutation IssueCreate($teamId: String!, $title: String!, $description: String, $projectId: String, $stateId: String) {
-          issueCreate(input: { teamId: $teamId, title: $title, description: $description, projectId: $projectId, stateId: $stateId }) {
+        mutation IssueCreate($teamId: String!, $title: String!, $description: String, $projectId: String, $stateId: String, $assigneeId: String, $dueDate: TimelessDate) {
+          issueCreate(input: { teamId: $teamId, title: $title, description: $description, projectId: $projectId, stateId: $stateId, assigneeId: $assigneeId, dueDate: $dueDate }) {
             success
             issue { id title identifier url state { id name } }
           }
@@ -93,9 +93,12 @@ class LinearService:
             "title": title, 
             "description": description, 
             "projectId": project_id,
-            "stateId": state_id
+            "stateId": state_id,
+            "assigneeId": assignee_id,
+            "dueDate": due_date
         })
         return data.get("issueCreate", {}).get("issue", {})
+
 
     def update_issue_state(self, issue_id: str, state_id: str) -> Dict:
         """Update an issue's workflow state."""
@@ -109,6 +112,23 @@ class LinearService:
         """
         data = self._query(mutation, {"id": issue_id, "stateId": state_id})
         return data.get("issueUpdate", {}).get("issue", {})
+    def update_issue(self, issue_id: str, title: Optional[str] = None, assignee_id: Optional[str] = None, due_date: Optional[str] = None) -> Dict:
+        """Update an existing issue's properties."""
+        mutation = """
+        mutation IssueUpdate($id: String!, $title: String, $assigneeId: String, $dueDate: TimelessDate) {
+          issueUpdate(id: $id, input: { title: $title, assigneeId: $assigneeId, dueDate: $dueDate }) {
+            success
+            issue { id title identifier }
+          }
+        }
+        """
+        data = self._query(mutation, {
+            "id": issue_id,
+            "title": title,
+            "assigneeId": assignee_id,
+            "dueDate": due_date
+        })
+        return data.get("issueUpdate", {}).get("issue", {})
 
     def search_issues(self, query: str) -> List[Dict]:
         """Search issues in Linear."""
@@ -121,3 +141,18 @@ class LinearService:
         """
         data = self._query(query_gql, {"query": query})
         return data.get("issues", {}).get("nodes", [])
+    def get_team_members(self, team_id: str) -> List[Dict]:
+        """List all members of a specific team."""
+        query = """
+        query TeamMembers($teamId: String!) {
+          team(id: $teamId) {
+            members {
+              nodes { 
+                id name avatarUrl email
+              }
+            }
+          }
+        }
+        """
+        data = self._query(query, {"teamId": team_id})
+        return data.get("team", {}).get("members", {}).get("nodes", [])

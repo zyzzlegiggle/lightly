@@ -400,7 +400,7 @@ export default function WorkspacePage() {
         <WorkspaceRail activeTab={activeTab} onTabChange={handleTabChange} />
 
         {/* ── Active workspace panel ── */}
-        {activeTab === "chat" && (
+        <div className={activeTab === "chat" ? "block" : "hidden"}>
           <ChatSidebar
             projectId={projectId}
             isCollapsed={false}
@@ -411,13 +411,27 @@ export default function WorkspacePage() {
             onTabChange={handleTabChange}
             currentPage={currentPath}
           />
-        )}
-        {activeTab === "gmail" && <GmailPanel refreshKey={refreshKey} />}
-        {activeTab === "calendar" && <CalendarPanel refreshKey={refreshKey} />}
+        </div>
+        
+        <div className={activeTab === "gmail" ? "block" : "hidden"}>
+          <GmailPanel refreshKey={refreshKey} />
+        </div>
+        
+        <div className={activeTab === "calendar" ? "block" : "hidden"}>
+          <CalendarPanel refreshKey={refreshKey} />
+        </div>
 
-        {activeTab === "slack" && <SlackPanel projectId={projectId} refreshKey={refreshKey} />}
-        {activeTab === "linear" && <LinearPanel projectId={projectId} refreshKey={refreshKey} />}
-        {activeTab === "notion" && <NotionPanel projectId={projectId} refreshKey={refreshKey} />}
+        <div className={activeTab === "slack" ? "block" : "hidden"}>
+          <SlackPanel projectId={projectId} refreshKey={refreshKey} />
+        </div>
+
+        <div className={activeTab === "linear" ? "block" : "hidden"}>
+          <LinearPanel projectId={projectId} refreshKey={refreshKey} />
+        </div>
+
+        <div className={activeTab === "notion" ? "block" : "hidden"}>
+          <NotionPanel projectId={projectId} refreshKey={refreshKey} />
+        </div>
 
         {/* ── Browser preview ── */}
         <div className="flex-1 overflow-hidden p-3 flex flex-col gap-0">
