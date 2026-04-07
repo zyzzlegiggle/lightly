@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { account } from "@/lib/schema";
 import { and, eq } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { exchangeForServiceToken } from "@/lib/token-vault";
 
 // Cache management token (24h TTL)
 let cachedMgmtToken: { token: string; expiresAt: number } | null = null;
@@ -123,12 +124,24 @@ export async function GET(req: Request) {
     }
   }
 
-  // ── Step 3: Get the provider access token via Management API ──────────────
-  // This is the same pattern auth-context.ts uses for GitHub — fetch the
-  // user record from the Mgmt API and extract the federated identity's token.
+  // ── Step 3: Get the provider access token ─────────────────────────────────
   let serviceToken: string | null = null;
+  const isCustomIntegration = connection === "linear" || connection === "notion";
 
-  if (secondarySub) {
+  // Priority 1: Token Vault (for native connections)
+  if (!isCustomIntegration && refreshToken) {
+    console.log(`[Connect Callback] Priority 1 — Trying Token Vault for ${connection}`);
+    try {
+      serviceToken = await exchangeForServiceToken(refreshToken, connection);
+      console.log(`[Connect Callback] Token Vault success for ${connection}`);
+    } catch (e) {
+      console.warn(`[Connect Callback] Token Vault not available for ${connection}, falling back...`);
+    }
+  }
+
+  // Priority 2: Management API (Primary for Linear/Notion, or fallback for others)
+  if (!serviceToken && secondarySub) {
+    console.log(`[Connect Callback] Priority 2 — Trying Management API for ${connection}`);
     try {
       const mgmtToken = await getManagementToken();
       const userResp = await fetch(
@@ -142,7 +155,7 @@ export async function GET(req: Request) {
           (i: any) => i.provider === connection || i.connection === connection
         );
         serviceToken = identity?.access_token ?? null;
-        console.log(`[Connect Callback] Got provider token via Management API for ${connection}: ${serviceToken ? "✓" : "✗"}`);
+        console.log(`[Connect Callback] Got token via Management API for ${connection}: ${serviceToken ? "✓" : "✗"}`);
       } else {
         console.warn(`[Connect Callback] Management API fetch failed:`, await userResp.text());
       }
@@ -151,40 +164,9 @@ export async function GET(req: Request) {
     }
   }
 
-  // ── Step 4: Fallback to Token Vault if Management API didn't yield a token ─
-  if (!serviceToken && refreshToken) {
-    console.log(`[Connect Callback] Trying Token Vault fallback for ${connection}`);
-    const vaultResp = await fetch(`https://${domain}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type:
-          "urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token",
-        subject_token: refreshToken,
-        subject_token_type: "urn:ietf:params:oauth:token-type:refresh_token",
-        requested_token_type:
-          "http://auth0.com/oauth/token-type/token-vault-access-token",
-        connection,
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
-
-    if (vaultResp.ok) {
-      const vault = await vaultResp.json();
-      serviceToken = vault.access_token;
-      console.log(`[Connect Callback] Token Vault success for ${connection}`);
-    } else {
-      const err = await vaultResp.text();
-      console.error(`[Connect Callback] Token Vault failed for ${connection}:`, err);
-      console.error(`  → To fix: enable Token Vault on the "${connection}" connection`);
-      console.error(`    Auth0 Dashboard → Authentication → Social → ${connection} → Purpose → Connected Accounts for Token Vault`);
-    }
-  }
-
-  // ── Step 4b: Final fallback — use Auth0 access_token directly ──
+  // Final fallback — use Auth0 access_token directly (usually for very simple cases)
   if (!serviceToken && tokens.access_token) {
-    console.log(`[Connect Callback] Using Auth0 access_token as fallback for ${connection}`);
+    console.log(`[Connect Callback] Final Fallback — Using Auth0 access_token for ${connection}`);
     serviceToken = tokens.access_token;
   }
 

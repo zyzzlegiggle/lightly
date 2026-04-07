@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { account } from "./schema";
 import { and, eq } from "drizzle-orm";
+import { exchangeForServiceToken } from "./token-vault";
 
 /**
  * Shared helper to get a management API token.
@@ -38,19 +39,40 @@ async function getManagementToken(): Promise<string> {
  * Checks both the Auth0 identities (for linked accounts) AND the local DB (for connected accounts).
  */
 export async function getServiceToken(userId: string, providerId: string): Promise<string | null> {
-  // 1. Check local DB 'account' table first
-  // This is where we store tokens from our custom 'Connect' flow, which
-  // usually have the specific scopes (like gmail.modify) we need.
+  // 1. Check local DB 'account' table
+  let row: any = null;
   try {
-    const row = await db.query.account.findFirst({
+    row = await db.query.account.findFirst({
       where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
     });
-    if (row?.accessToken) return row.accessToken;
   } catch (e) {
     console.error(`[Tokens] DB error for ${providerId}:`, e);
   }
 
-  // 2. Fallback to Auth0 Management API (for primary/linked accounts)
+  // 2. If we have a refresh token, try to get a fresh access token via Token Vault
+  // This ensures we always have the most current/valid token if the service supports it.
+  const isTokenVaultSupported = providerId === "google-oauth2" || providerId === "slack" || providerId === "github";
+  if (row?.refreshToken && isTokenVaultSupported) {
+    try {
+      console.log(`[Tokens] Attempting Token Vault refresh for ${providerId}`);
+      const freshToken = await exchangeForServiceToken(row.refreshToken, providerId);
+      
+      // Optistically update the DB so the next call is faster
+      db.update(account)
+        .set({ accessToken: freshToken, updatedAt: new Date() })
+        .where(eq(account.id, row.id))
+        .catch(err => console.error("[Tokens] DB update failed:", err));
+
+      return freshToken;
+    } catch (e) {
+      console.warn(`[Tokens] Token Vault refresh failed for ${providerId}:`, e);
+    }
+  }
+
+  // 3. Fallback: Return existing DB token if it's still usable (and we haven't refreshed)
+  if (row?.accessToken) return row.accessToken;
+
+  // 4. Final Fallback: Auth0 Management API (for primary/linked accounts)
   try {
     const domain = process.env.AUTH0_DOMAIN!;
     const mgmtToken = await getManagementToken();

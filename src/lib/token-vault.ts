@@ -1,6 +1,6 @@
 /**
- * Token Vault helper — exchanges an Auth0 refresh token for a
- * short-lived GitHub access token stored in the Token Vault.
+ * Generic Token Vault helper — exchanges an Auth0 refresh token for a
+ * provider access token (Google, Slack, GitHub, etc.) stored in the Token Vault.
  *
  * Uses the Refresh Token Exchange flow (for confidential web apps):
  * POST /oauth/token with grant_type=urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token
@@ -12,15 +12,15 @@ const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID!;
 const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET!;
 
 /**
- * Exchange an Auth0 refresh token for a GitHub access token via Token Vault.
+ * Exchange an Auth0 refresh token for a provider access token via Token Vault.
  *
- * @param refreshToken - The user's Auth0 refresh token (from session)
- * @param connection - The Auth0 connection name for GitHub (default: "github")
- * @returns The short-lived GitHub access token
+ * @param refreshToken - The user's Auth0 refresh token
+ * @param connection - The Auth0 connection name (e.g. "google-oauth2", "slack", "github")
+ * @returns The provider access token
  */
-export async function exchangeForGitHubToken(
+export async function exchangeForServiceToken(
   refreshToken: string,
-  connection: string = "github"
+  connection: string
 ): Promise<string> {
   const url = `https://${AUTH0_DOMAIN}/oauth/token`;
 
@@ -44,8 +44,8 @@ export async function exchangeForGitHubToken(
 
   if (!resp.ok) {
     const errBody = await resp.text();
-    console.error("[TokenVault] Exchange failed:", resp.status, errBody);
-    throw new Error(`Token Vault exchange failed: ${resp.status}`);
+    console.error(`[TokenVault] Exchange failed for ${connection}:`, resp.status, errBody);
+    throw new Error(`Token Vault exchange failed for ${connection}: ${resp.status}`);
   }
 
   const data = await resp.json();

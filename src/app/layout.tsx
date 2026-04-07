@@ -20,7 +20,7 @@ const inriaSerif = Inria_Serif({
 export const metadata: Metadata = {
   title: "Lightly",
   description: "Modify app anywhere anytime.",
-  icons: "/logo.png",
+  icons: "/favicon.ico",
 };
 
 export default function RootLayout({
