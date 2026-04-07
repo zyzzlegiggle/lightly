@@ -41,7 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const linearAccount = connectedAccounts.find((a) => a.providerId === "linear");
 
   // Forward to FastAPI agent
-  const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+  const backendUrl = (process.env.AGENT_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
   const pyResp = await fetch(`${backendUrl}/api/agent/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

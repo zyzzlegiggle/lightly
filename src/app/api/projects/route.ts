@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     // Call Python FastAPI backend to start indexing
-    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const backendUrl = (process.env.AGENT_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
     const pyResp = await fetch(`${backendUrl}/api/projects/sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

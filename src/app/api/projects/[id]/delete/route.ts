@@ -26,7 +26,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const doAppId = deleted[0].doAppId;
   if (doAppId && !doAppId.startsWith("mock-")) {
     try {
-      const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+      const backendUrl = (process.env.AGENT_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
       await fetch(`${backendUrl}/api/droplets/${doAppId}/destroy`, { method: "DELETE" });
     } catch { /* best effort */ }
   }

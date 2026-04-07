@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   pyFormData.append("file", file);
 
   try {
-    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const backendUrl = (process.env.AGENT_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
     const pyResp = await fetch(`${backendUrl}/api/uploads`, {
       method: "POST",
       body: pyFormData,

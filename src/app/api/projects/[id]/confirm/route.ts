@@ -26,7 +26,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { changes, message = "Apply changes" } = await req.json();
 
   // GitHub token from Token Vault (short-lived, secure)
-  const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+  const backendUrl = (process.env.AGENT_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
   const pyResp = await fetch(`${backendUrl}/api/agent/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
