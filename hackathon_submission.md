@@ -36,3 +36,20 @@ Lightly is an AI-powered workspace that unifies development with management and 
 
 ### Auth0 Token Vault Highlight
 Lightly uses Auth0 as a **secure token proxy**. When the agent needs to act, it calls our backend to perform a **Federated Token Exchange**. Auth0 identifies the user, refreshes the provider token in the background, and returns a valid credential. This allows the agent to function autonomously without the user ever needing to manually re-login to individual services.
+
+***
+
+# 📝 BONUS BLOG POST: Scaling AI Agentic Workflows with Auth0 Token Vault
+
+Building an AI agent that can truly "act" on behalf of a user is a daunting task, primarily because of the security risks associated with third-party integrations. Traditionally, developers were forced to choose between a poor user experience (frequent re-authentication) or a major security risk (storing raw, long-lived access tokens in a local database). When we set out to build **Lightly**, we knew we needed a third option. That is where Auth0 Token Vault became our secret weapon.
+
+### The Integration Wall
+In the early days of development, our AI agent struggled with "integration fragmentation." We were trying to manage OAuth flows for Slack, Linear, Notion, and Google simultaneously. Every service has its own token expiry window and refresh logic. Orchestrating this at scale meant building a complex, error-prone token manager that sat dangerously close to our main application logic.
+
+### Solving the "401" Problem with Token Vault
+By implementing **Auth0 Token Vault**, we moved the security burden from our database to a world-class identity provider. Our biggest achievement was the implementation of the **Federated Token Exchange** (`urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token`). This architecture allows our Python-based AI agent to request a fresh token only when it is actually needed. 
+
+Instead of our backend storing sensitive client secrets for every service, we use Auth0 as a secure vault. When the agent wants to post a Slack update, it performs a secure handshake with Auth0. Auth0 verifies the session, refreshes the underlying Slack token using its own encrypted storage, and returns a short-lived credential to our agent.
+
+### The Future of Agentic Autonomy
+This shift unlocked true autonomy for Lightly. Because Token Vault handles the complexities of federated identity, our agent can function during long-running background tasks without ever hitting a "401 Unauthorized" error. It ensures that the developer's "mission control" remains active and connected, regardless of how many tools are in the stack. By leveraging Token Vault, we stopped being "token managers" and started being "agent architects," focusing on the logic that actually matters: helping developers move faster.

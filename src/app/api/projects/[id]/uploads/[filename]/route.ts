@@ -2,7 +2,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { filename } = await params;
 
   try {
-    const pyResp = await fetch(`http://localhost:8000/uploads/${filename}`);
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const pyResp = await fetch(`${backendUrl}/uploads/${filename}`);
     if (!pyResp.ok) {
       return new Response("File not found", { status: 404 });
     }

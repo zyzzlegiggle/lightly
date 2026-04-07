@@ -57,7 +57,7 @@ export async function PATCH(
       console.log(`[Settings] Syncing new .env to Droplet ${dropletId} at ${dropletIp}...`);
       
       try {
-        const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8000";
+        const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
         const syncResp = await fetch(`${backendUrl}/api/droplets/${dropletId}/sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

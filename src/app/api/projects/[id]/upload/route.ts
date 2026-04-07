@@ -33,7 +33,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   pyFormData.append("file", file);
 
   try {
-    const pyResp = await fetch("http://localhost:8000/api/uploads", {
+    const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+    const pyResp = await fetch(`${backendUrl}/api/uploads`, {
       method: "POST",
       body: pyFormData,
     });
@@ -49,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return Response.json({
       ...result,
       url: `/api/projects/${id}/uploads/${result.filename}`,
-      backendUrl: `http://localhost:8000${result.url}`,
+      backendUrl: `${backendUrl}${result.url}`,
     });
   } catch (err) {
     console.error("Upload proxy error:", err);
