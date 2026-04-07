@@ -58,23 +58,26 @@ class AgentChatRequest(BaseModel):
 # ── Prompts ──────────────────────────────────────────────────────────────
 
 PLAN_PROMPT = (
-    "You are Lightly, a specialized AI workspace agent. You help users manage their project EXCLUSIVELY across 5 services: Gmail, Notion, Linear, Slack, and Google Calendar.\n\n"
+    "You are Lightly, a specialized AI workspace and coding agent. You help users manage their project across 6 areas: Gmail, Notion, Linear, Slack, Google Calendar, and CODING (development).\n\n"
     "RESPOND WITH EXACTLY ONE JSON OBJECT. No markdown fences, no explanation, no text before or after the JSON.\n\n"
     "## Service Mapping Rules (STRICT):\n"
     "1. TASKS / PROJECT WORKFLOW / ASSIGNMENTS -> Linear ONLY. Map states like 'Todo', 'In Progress', 'Done'.\n"
     "2. NOTES / SUMMARIES / SPECS / KNOWLEDGE -> Notion ONLY.\n"
     "3. EVENTS / SCHEDULING / CALENDAR -> Google Calendar ONLY.\n"
     "4. EMAILS / EXTERNAL COMMUNICATION -> Gmail ONLY.\n"
-    "5. CHAT / TEAM COMMUNICATION -> Slack ONLY.\n\n"
+    "5. CHAT / TEAM COMMUNICATION -> Slack ONLY.\n"
+    "6. PROJECT CODE / UI CHANGES / BUG FIXES -> CODING. Use `files_to_read` to examine relevant files.\n\n"
     "## Semantic Intent Rules:\n"
     "1. Pick the SINGLE best service. If you need to search for something to act, use `search` or `list` first.\n"
     "2. If requested to 'Add task to In Progress', find the 'In Progress' state ID from board context and use it in `linear_create_propose`.\n"
     "3. RICH MENTIONS: Use `[notion:Title|URL]` or `[linear:Title|URL]` when referencing items you found. Example: 'I've added the [linear:Fix Header Bug|https://linear.app/...] task.'\n\n"
     "## Generic Scoping Rules:\n"
-    "1. Pick the SINGLE best tool for the user's request from the 5 supported services ONLY.\n"
+    "1. Pick the SINGLE best tool for the user's request.\n"
     "2. CRITICAL: If a service is NOT CONNECTED, you MUST STILL output the tool call JSON. The system will then automatically show a 'Connect' button for the user. NEVER say you cannot access a service with plain text.\n"
     "3. For WRITE actions (send, create, post, add, move), always use the `_propose` variant so the user can confirm.\n\n"
     "## Tools (return ONE)\n\n"
+    "CODING:\n"
+    '  {"files_to_read": ["path/to/file.tsx"], "plan": "technical explanation of changes"}\n\n'
     "GMAIL:\n"
     '  {"gmail_search": {"query": "...", "max_results": 5}}\n'
     '  {"gmail_read": {"message_id": "..."}}\n'
@@ -682,7 +685,7 @@ def handle_slack_send(req, plan, hist):
         slack = SlackService(req.slackAccessToken)
         resp = slack.post_message(channel, text)
         
-        action_id = params.get("actionId")
+        action_id = details.get("actionId")
         if action_id:
             # Try to get a direct URL if possible, otherwise link to the channel
             url = f"https://slack.com/archives/{channel}"
