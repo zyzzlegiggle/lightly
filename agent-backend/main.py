@@ -184,10 +184,18 @@ async def get_app_status(droplet_id: str):
         try:
             health = requests.get(f"http://{ip}:8080/health", timeout=3)
             if not health.ok: return {"phase": "DEPLOYING", "logs": "Sync API booting..."}
-            dev = requests.get(f"http://{ip}:3000", timeout=3)
-        except Exception: return {"phase": "DEPLOYING", "logs": "Installing dependencies...", "dropletIp": ip}
-        return {"phase": "ACTIVE", "liveUrl": f"http://{ip}:3000", "dropletIp": ip}
-    except Exception as e: return {"phase": "ERROR", "logs": str(e)}
+            # Check if the dev server on port 3000 is actually responding
+            try:
+                dev = requests.get(f"http://{ip}:3000", timeout=3)
+                if dev.ok:
+                    return {"phase": "ACTIVE", "liveUrl": f"http://{ip}:3000", "dropletIp": ip}
+                return {"phase": "DEPLOYING", "logs": "Dev server starting...", "dropletIp": ip}
+            except Exception:
+                return {"phase": "DEPLOYING", "logs": "Waiting for dev server on :3000...", "dropletIp": ip}
+        except Exception:
+            return {"phase": "DEPLOYING", "logs": "Starting dev server...", "dropletIp": ip}
+    except Exception as e:
+        return {"phase": "ERROR", "logs": str(e)}
 
 @app.delete("/api/droplets/{droplet_id}/destroy")
 async def destroy_droplet(droplet_id: str):

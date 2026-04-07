@@ -77,7 +77,8 @@ PLAN_PROMPT = (
     "3. For WRITE actions (send, create, post, add, move), always use the `_propose` variant so the user can confirm.\n\n"
     "## Tools (return ONE)\n\n"
     "CODING:\n"
-    '  {"files_to_read": ["path/to/file.tsx"], "plan": "technical explanation of changes"}\n\n'
+    '  {"files_to_read": ["path/to/file.tsx"], "plan": "technical explanation of changes"}\n'
+    '  {"gh_open_pr_propose": {"title": "...", "body": "PR description"}}\n\n'
     "GMAIL:\n"
     '  {"gmail_search": {"query": "...", "max_results": 5}}\n'
     '  {"gmail_read": {"message_id": "..."}}\n'
@@ -206,6 +207,53 @@ def gh_commit_changes(repo: str, branch: str, token: str, changes: list[dict], m
     update_ref.raise_for_status()
 
     print(f"[GitHub] Created commit {new_commit_sha[:8]} on {branch}")
+    return new_commit_sha
+
+def gh_create_pr(repo: str, branch: str, title: str, body: str, token: str) -> dict:
+    """Create a Pull Request via GitHub API."""
+    url = f"https://api.github.com/repos/{repo}/pulls"
+    headers = _gh_headers(token)
+    payload = {
+        "title": title,
+        "body": body,
+        "head": branch,
+        "base": "main" # or dynamic base if needed
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+def handle_gh_open_pr_propose(req, plan, hist):
+    """Propose opening a Pull Request."""
+    details = plan["gh_open_pr_propose"]
+    title = details.get("title", "Update Application")
+    body = details.get("body", "Applied changes from Lightly workspace.")
+    
+    yield sse("message", 
+        content=f"I've prepared a Pull Request for you:\n\n**Title:** {title}\n\n{body}",
+        actions=[{
+            "label": "Open Pull Request", 
+            "icon": "github", 
+            "tab": "coding",
+            "confirmAction": "gh_create_pr", 
+            "params": {"title": title, "body": body}
+        }]
+    )
+    yield sse("done")
+
+def handle_gh_create_pr(req, plan, hist):
+    """Actually create the Pull Request."""
+    params = plan.get("gh_create_pr") or {}
+    repo = _parse_repo(req.githubUrl)
+    try:
+        pr = gh_create_pr(repo, req.branch, params.get("title"), params.get("body"), req.githubToken)
+        yield sse("message", 
+            content=f"🚀 Pull Request created successfully! You can view it here: [PR #{pr['number']}]({pr['html_url']})",
+            actions=[{"label": "View PR on GitHub", "url": pr["html_url"], "icon": "github"}]
+        )
+    except Exception as e:
+        yield sse("message", content=f"Failed to create PR: {str(e)}")
+    yield sse("done")
 
 # ── LLM helpers ─────────────────────────────────────────────────────────
 

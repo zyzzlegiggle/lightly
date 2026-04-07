@@ -40,19 +40,10 @@ export default function WorkspacePage() {
 
   const phase = statusData?.phase || "BUILDING";
 
-  // ── HTTPS detection (for ngrok proxy) ──
-  const [isHttps, setIsHttps] = useState(false);
-  useEffect(() => {
-    setIsHttps(window.location.protocol === "https:");
-  }, []);
-
-  // If the main app is on HTTPS (ngrok) and the preview is on HTTP, use the local proxy to avoid Mixed Content errors.
-  const useProxy = isHttps && previewUrl?.startsWith("http://");
-  const proxyBase = `/api/preview/${projectId}/`;
-  const iframeSrc = previewUrl
-    ? (useProxy
-      ? `${proxyBase}${currentPath.replace(/^\//, "")}`
-      : `${previewUrl.replace(/\/$/, "")}${currentPath}`)
+  // ── Compute the Proxied Preview URL ──
+  // We wrap the raw Droplet IP in our Next.js Reverse Proxy for HTTPS and Host compatibility
+  const iframeSrc = previewUrl 
+    ? `/api/preview/${projectId}/${currentPath.replace(/^\//, "")}`
     : null;
 
   // Toggle tab — clicking the active tab collapses the panel
@@ -453,35 +444,48 @@ export default function WorkspacePage() {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" /></svg>
                 </button>
                 <button
-                  className="p-1 hover:bg-zinc-200 rounded transition-colors"
-                  onClick={() => { setIframeKey((k) => k + 1); setIframeStatus("loading"); }}
-                  title="Refresh"
+                  onClick={() => { setIframeKey(k => k + 1); setIframeStatus("loading"); }}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors border border-transparent active:border-zinc-300"
+                  title="Refresh Preview"
+                  disabled={phase !== "ACTIVE" || !previewUrl}
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
               </div>
               <form onSubmit={handlePathSubmit} className="flex-1 flex items-center justify-center">
-                <div className="flex items-center gap-1.5 bg-white border border-zinc-200 rounded-lg px-3 py-1 min-w-[200px] max-w-md w-full shadow-inner focus-within:border-zinc-400 focus-within:ring-1 focus-within:ring-zinc-300 transition-all">
+                <div className={`flex items-center gap-1.5 bg-zinc-50 border ${iframeStatus === "ready" ? "border-zinc-200" : "border-amber-200"} rounded-lg px-3 py-1 min-w-[240px] max-w-lg w-full shadow-inner focus-within:bg-white focus-within:border-zinc-400 focus-within:ring-2 focus-within:ring-zinc-100 transition-all`}>
                   {phase === "ACTIVE" && previewUrl ? (
                     <>
-                      <svg className="w-3 h-3 text-zinc-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                      </svg>
+                      {previewUrl.startsWith("https") ? (
+                        <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3 h-3 text-zinc-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      )}
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest hidden sm:inline">{previewUrl.split('://')[1].split('.')[0]}</span>
+                      <div className="w-[1px] h-3 bg-zinc-200 mx-0.5 hidden sm:block" />
                       <input
                         type="text"
                         value={pathInput}
                         onChange={(e) => setPathInput(e.target.value)}
                         onBlur={() => navigateToPath(pathInput)}
-                        className="flex-1 text-xs text-zinc-600 font-mono bg-transparent outline-none min-w-0"
+                        className="flex-1 text-xs text-zinc-700 font-mono bg-transparent outline-none min-w-0"
                         spellCheck={false}
+                        placeholder="/"
                       />
+                      {iframeStatus === "ready" && (
+                        <div className="flex items-center gap-1 ml-1 scale-90">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
-                      <svg className="w-3 h-3 text-zinc-400 shrink-0 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span className="text-xs text-zinc-400 italic">/</span>
+                      <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin shrink-0" />
+                      <span className="text-xs text-zinc-400 italic">Initializing...</span>
                     </>
                   )}
                 </div>
@@ -491,9 +495,7 @@ export default function WorkspacePage() {
                   <>
                     <button
                       onClick={() => {
-                        const fullUrl = useProxy
-                          ? `${window.location.origin}${proxyBase}${currentPath.replace(/^\//, "")}`
-                          : `${previewUrl.replace(/\/$/, "")}${currentPath}`;
+                        const fullUrl = (previewUrl?.endsWith("/") ? previewUrl : `${previewUrl}/`) + currentPath.replace(/^\//, "");
                         navigator.clipboard.writeText(fullUrl);
                       }}
                       className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors"
@@ -502,7 +504,7 @@ export default function WorkspacePage() {
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                     </button>
                     <a
-                      href={useProxy ? `${proxyBase}${currentPath.replace(/^\//, "")}` : `${previewUrl}${currentPath}`}
+                      href={(previewUrl?.endsWith("/") ? previewUrl : `${previewUrl}/`) + currentPath.replace(/^\//, "")}
                       target="_blank"
                       rel="noreferrer"
                       className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 rounded-lg transition-colors"
@@ -517,40 +519,44 @@ export default function WorkspacePage() {
 
             {/* Iframe area */}
             <div className="flex-1 overflow-hidden relative bg-white">
-              {phase !== "ACTIVE" && !previewUrl ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-50/50">
-                  <div className="relative mb-6">
-                    <div className="w-16 h-16 border-[3px] border-zinc-200 rounded-full" />
-                    <div className="w-16 h-16 border-[3px] border-accent-primary border-t-transparent rounded-full animate-spin absolute inset-0" />
-                  </div>
-                  <h2 className="text-xl font-bold text-zinc-800 mb-1.5">Setting up your sandbox...</h2>
-                  <p className="text-zinc-500 text-sm max-w-sm text-center">
-                    {statusData?.logs || "Installing dependencies..."}
-                  </p>
-                </div>
-              ) : iframeSrc ? (
-                <>
-                  <iframe
-                    ref={iframeRef}
-                    key={iframeKey}
-                    src={iframeSrc}
-                    className="w-full h-full border-none bg-white font-sans"
-                    title="Live Preview"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
-                    allow="clipboard-read; clipboard-write; camera; microphone; geolocation; fullscreen"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    onLoad={() => setIframeStatus("ready")}
-                    onError={() => { setIframeStatus("error"); setPreviewError("Failed to load preview"); }}
-                  />
-                  {iframeStatus === "loading" && (
-                    <div className="absolute top-0 left-0 right-0 h-0.5 bg-zinc-200 overflow-hidden">
-                      <div className="h-full bg-accent-primary animate-pulse w-full" style={{ animation: "loading-bar 1.5s ease-in-out infinite" }} />
-                    </div>
-                  )}
-                </>
+              {/* Main Iframe - rendered as soon as URL is available */}
+              {iframeSrc ? (
+                <iframe
+                  ref={iframeRef}
+                  key={iframeKey}
+                  src={iframeSrc}
+                  className={`w-full h-full border-none bg-white font-sans transition-opacity duration-700 ${iframeStatus === "ready" ? "opacity-100" : "opacity-0"}`}
+                  title="Live Preview"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
+                  allow="clipboard-read; clipboard-write; camera; microphone; geolocation; fullscreen"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  onLoad={() => setIframeStatus("ready")}
+                  onError={() => { setIframeStatus("error"); setPreviewError("Failed to load preview"); }}
+                />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <p className="text-zinc-500 text-sm">Waiting for preview URL...</p>
+                </div>
+              )}
+
+              {/* Seamless Loading Overlay */}
+              {(phase !== "ACTIVE" || iframeStatus === "loading") && iframeSrc && (
+                <div className={`absolute inset-0 flex flex-col items-center justify-center bg-white z-20 transition-all duration-700 ${iframeStatus === "ready" ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                  <div className="relative mb-8">
+                    <div className="w-16 h-16 border-[3px] border-zinc-100 rounded-full" />
+                    <div className="w-16 h-16 border-[3px] border-zinc-950 border-t-transparent rounded-full animate-spin absolute inset-0" />
+                  </div>
+                  <h2 className="text-xl font-bold text-zinc-900 mb-2">
+                    {phase === "ACTIVE" ? "Launching project..." : "Setting up your sandbox..."}
+                  </h2>
+                  <div className="max-w-sm w-full space-y-4 px-6 text-center">
+                    <p className="text-zinc-500 text-sm font-medium animate-pulse">
+                      {statusData?.logs || "Initializing development environment..."}
+                    </p>
+                    <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden shadow-inner">
+                      <div className="h-full bg-zinc-900 animate-[loading-bar_1.5s_infinite]" />
+                    </div>
+                  </div>
                 </div>
               )}
 

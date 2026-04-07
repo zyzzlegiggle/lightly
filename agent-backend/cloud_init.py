@@ -139,8 +139,6 @@ http.createServer((req, res) => {
     // Also include running processes on ports 3000 and 8080
     let procs = "";
     try { procs = execSync("ps aux | grep -E '(node|npm|next|vite)' | grep -v grep", {encoding:"utf-8"}); } catch(e) { procs = "(no matching processes)"; }
-    let ports = "";
-    try { ports = execSync("ss -tlnp | grep -E '(3000|8080)'", {encoding:"utf-8"}); } catch(e) { ports = "(no listeners on 3000/8080)"; }
     res.writeHead(200,{"Content-Type":"application/json"});
     res.end(JSON.stringify({logs: logs.slice(-3000), processes: procs, ports: ports}));
     return;

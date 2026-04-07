@@ -1,0 +1,36 @@
+{
+    # Enable On-Demand TLS
+    on_demand_tls {
+        # Ask our backend if the domain is allowed
+        # Note: Change 'localhost:8080' to your backend's public address if remote
+        ask http://localhost:8080/api/gateway/check
+    }
+}
+
+# The Preview Gateway
+# Replace 'preview.yourdomain.com' with your actual domain
+:443, *.preview.yourdomain.com {
+    tls {
+        on_demand
+    }
+
+    # Extract the project ID from the subdomain (e.g. 'foo' from 'foo.preview...')
+    # Assuming the format is {project_id}.preview.yourdomain.com
+    @subdomain header_regexp sub Host ^([^.]+)\.preview\.
+    
+    handle @subdomain {
+        # Rewrite the request to the backend proxy endpoint
+        # {re.sub.1} is the first capture group (the project ID)
+        rewrite * /api/gateway/proxy/{re.sub.1}{uri}
+        
+        reverse_proxy http://localhost:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Fallback/Health check
+    handle {
+        abort
+    }
+}
