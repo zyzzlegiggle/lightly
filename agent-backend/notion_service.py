@@ -33,13 +33,35 @@ class NotionService:
 
     def create_page(self, parent_id: str, title: str, content: str = "") -> Dict:
         """Create a new page in Notion."""
+        # Split content into blocks by newlines
+        blocks = []
+        for line in content.split("\n"):
+            if line.strip():
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {"content": line}}]
+                    }
+                })
+        
+        if not blocks:
+            blocks = [{
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": ""}}]
+                }
+            }]
+
         payload = {
             "parent": {"page_id": parent_id},
             "properties": {
                 "title": [
                     {"text": {"content": title}}
                 ]
-            }
+            },
+            "children": blocks[:100]  # Notion limit is 100 blocks per request
         }
         resp = requests.post(
             "https://api.notion.com/v1/pages",

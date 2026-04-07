@@ -9,9 +9,17 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
+import { Inria_Serif } from "next/font/google";
+
+const inriaSerif = Inria_Serif({
+  variable: "--font-inria",
+  subsets: ["latin"],
+  weight: ["300", "400", "700"],
+});
+
 export const metadata: Metadata = {
-  title: "Lightly - Built for Designers",
-  description: "Modify app design without worrying about code.",
+  title: "Lightly",
+  description: "Modify app anywhere anytime.",
   icons: "/logo.png",
 };
 
@@ -23,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} font-sans antialiased`}
+        className={`${inter.variable} ${inriaSerif.variable} font-sans antialiased`}
       >
         <Auth0Provider>
           {children}

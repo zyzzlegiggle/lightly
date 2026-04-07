@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
+import { BoardSkeleton } from "./LoaderComponents";
 
 interface Issue {
   id: string;
@@ -31,9 +32,10 @@ interface State {
 
 interface LinearPanelProps {
   projectId: string;
+  refreshKey?: number;
 }
 
-export function LinearPanel({ projectId }: LinearPanelProps) {
+export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
   const [loading, setLoading] = useState(true);
   const [initLoading, setInitLoading] = useState(false);
   const [status, setStatus] = useState<"loading" | "uninitialized" | "ready">("loading");
@@ -80,7 +82,7 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
 
   useEffect(() => {
     fetchData();
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   const handleInit = async () => {
     if (!selectedTeam) return;
@@ -181,6 +183,17 @@ export function LinearPanel({ projectId }: LinearPanelProps) {
       handleMove(issueId, stateId);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="w-[340px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0 overflow-hidden">
+        <div className="h-10 border-b border-zinc-100 flex items-center px-4 shrink-0">
+          <div className="w-20 h-4 bg-zinc-100 rounded-md animate-pulse" />
+        </div>
+        <BoardSkeleton />
+      </div>
+    );
+  }
 
   if (!loading && (status === "loading" || (window as any).__LINEAR_NOT_CONNECTED)) {
     return (

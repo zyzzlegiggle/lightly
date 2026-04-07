@@ -56,9 +56,20 @@ export async function GET(req: Request) {
       if (msg.user) userIds.add(msg.user);
     }
 
+    // Discover self ID to display "You"
+    let selfId = "";
+    try {
+      const authTestResp = await fetch("https://slack.com/api/auth.test", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const authTestData = await authTestResp.json();
+      if (authTestData.ok) selfId = authTestData.user_id;
+    } catch {}
+
     // Batch fetch user info
     const userMap: Record<string, { name: string; avatar: string }> = {};
     for (const uid of userIds) {
+      if (uid === selfId) continue; // Skip resolving self, we'll manually set to "You"
       try {
         const uResp = await fetch(`https://slack.com/api/users.info?user=${uid}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -78,15 +89,18 @@ export async function GET(req: Request) {
     const messages = (data.messages || [])
       .filter((m: any) => m.type === "message" && !m.subtype)
       .reverse() // Slack returns newest first, we want oldest first
-      .map((m: any) => ({
-        ts: m.ts,
-        text: m.text || "",
-        user: m.user || "",
-        userName: userMap[m.user]?.name || m.user || "Unknown",
-        userAvatar: userMap[m.user]?.avatar || "",
-        threadTs: m.thread_ts,
-        replyCount: m.reply_count || 0,
-      }));
+      .map((m: any) => {
+        const isSelf = m.user === selfId;
+        return {
+          ts: m.ts,
+          text: m.text || "",
+          user: m.user || "",
+          userName: isSelf ? "You" : (userMap[m.user]?.name || m.user || "Unknown"),
+          userAvatar: isSelf ? "" : (userMap[m.user]?.avatar || ""),
+          threadTs: m.thread_ts,
+          replyCount: m.reply_count || 0,
+        };
+      });
 
     return Response.json({ messages });
   } catch (err) {

@@ -132,15 +132,32 @@ export function CreateProjectModal({ isOpen, onClose, session }: CreateProjectMo
       <div className="bg-white rounded-2xl p-8 w-full max-w-2xl shadow-xl border border-zinc-200 flex flex-col max-h-[80vh] overflow-hidden">
         
         {isCreatingProject ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-16 space-y-6">
+          <div className="flex-1 flex flex-col items-center justify-center py-24 space-y-8 animate-in fade-in duration-500">
             <div className="relative">
-              <div className="w-16 h-16 border-4 border-zinc-100 rounded-full"></div>
-              <div className="w-16 h-16 border-4 border-accent-primary border-t-transparent rounded-full animate-spin absolute inset-0"></div>
+              <div className="absolute inset-0 bg-accent-primary/20 blur-3xl animate-pulse rounded-full" />
+              <div className="relative">
+                <div className="w-20 h-20 border-4 border-zinc-100 rounded-full" />
+                <div className="w-20 h-20 border-4 border-accent-primary border-t-transparent rounded-full animate-spin absolute inset-0" />
+              </div>
             </div>
-            <div className="text-center">
-              <h3 className="text-xl font-bold text-text-primary mb-2">Loading Project...</h3>
-              <p className="text-sm text-text-muted">Setting up your environment</p>
+            <div className="text-center space-y-3 z-10">
+              <h3 className="text-2xl font-serif italic tracking-tight text-text-primary">Initializing Project...</h3>
+              <p className="text-sm text-text-muted max-w-[240px] mx-auto leading-relaxed">
+                We're setting up your secure build environment and linking your repository.
+              </p>
+              <div className="pt-4">
+                <div className="h-1 w-48 bg-zinc-100 rounded-full overflow-hidden mx-auto">
+                  <div className="h-full bg-accent-primary animate-[loading-bar_2s_infinite]" />
+                </div>
+              </div>
             </div>
+            
+            <style jsx>{`
+              @keyframes loading-bar {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
+              }
+            `}</style>
           </div>
         ) : !selectedRepo ? (
           <>

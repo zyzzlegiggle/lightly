@@ -90,7 +90,11 @@ function NotConnected() {
   );
 }
 
-export function CalendarPanel() {
+interface CalendarPanelProps {
+  refreshKey?: number;
+}
+
+export function CalendarPanel({ refreshKey }: CalendarPanelProps) {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [events, setEvents] = useState<CalEvent[]>([]);
@@ -138,7 +142,7 @@ export function CalendarPanel() {
     setIsLoading(false);
   }, [year, month]);
 
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  useEffect(() => { fetchEvents(); }, [fetchEvents, refreshKey]);
 
   // Build calendar grid
   const firstDow = new Date(year, month, 1).getDay();

@@ -208,28 +208,30 @@ export default function SettingsPageClient({
                   </div>
                 </div>
               ))}
-              <a
-                href="/api/auth/slack"
-                className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:text-zinc-600 transition-colors">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
+              {slackWorkspaces.length === 0 && (
+                <a
+                  href="/api/auth/slack"
+                  className="flex items-center justify-between p-4 bg-white hover:bg-zinc-50 rounded-xl border border-dashed border-border-subtle transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-400 group-hover:text-zinc-600 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-400 group-hover:text-zinc-700 transition-colors">
+                        Connect Slack
+                      </p>
+                      <p className="text-xs text-zinc-400">Not linked</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-zinc-400 group-hover:text-zinc-700 transition-colors">
-                      {slackWorkspaces.length > 0 ? "Add Another Workspace" : "Connect Slack"}
-                    </p>
-                    <p className="text-xs text-zinc-400">{slackWorkspaces.length > 0 ? "Link an additional Slack workspace" : "Not linked"}</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
-                  Connect
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-                </span>
-              </a>
+                  <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-1">
+                    Connect
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                  </span>
+                </a>
+              )}
 
               {/* Google / Gmail — checked from DB account table, not session */}
               {googleConnected ? (

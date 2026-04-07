@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { CardSkeleton, BlockSkeleton } from "./LoaderComponents";
 
 interface GmailMessage {
   id: string;
@@ -40,13 +41,6 @@ function parseSender(from: string) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function LoadingSpinner() {
-  return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="w-5 h-5 border-2 border-zinc-200 border-t-zinc-500 rounded-full animate-spin" />
-    </div>
-  );
-}
 
 function NotConnected() {
   return (
@@ -74,9 +68,11 @@ function NotConnected() {
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+interface GmailPanelProps {
+  refreshKey?: number;
+}
 
-export function GmailPanel() {
+export function GmailPanel({ refreshKey }: GmailPanelProps) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("inbox");
   const [messages, setMessages] = useState<GmailMessage[]>([]);
@@ -119,7 +115,7 @@ export function GmailPanel() {
 
   useEffect(() => {
     if (connected) loadMessages();
-  }, [connected]);
+  }, [connected, refreshKey]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,13 +248,33 @@ export function GmailPanel() {
         {/* Message list */}
         <div className="flex-1 overflow-y-auto min-h-0">
           {loadingMessages ? (
-            <LoadingSpinner />
+            <div className="py-1">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
-              <svg className="w-8 h-8 text-zinc-200 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <p className="text-xs text-zinc-400">{activeSearch ? "No results found" : "Your inbox is empty"}</p>
+            <div className="flex flex-col items-center justify-center h-full py-16 text-center px-8">
+              <div className="w-16 h-16 rounded-2xl bg-zinc-50 flex items-center justify-center mb-6 shadow-sm border border-zinc-100">
+                <svg className="w-7 h-7 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-[14px] font-bold text-zinc-800 mb-1">Inbox is empty</h3>
+              <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
+                {activeSearch 
+                  ? `No emails found matching "${activeSearch}"` 
+                  : "You're all caught up! You can also tell the AI agent to send emails or drafts for you."}
+              </p>
+              <button
+                onClick={() => setView("compose")}
+                className="inline-flex items-center gap-2 bg-zinc-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all shadow-md active:scale-95"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+                </svg>
+                Compose New Email
+              </button>
             </div>
           ) : (
             <div className="divide-y divide-zinc-50">
@@ -296,10 +312,23 @@ export function GmailPanel() {
       <div className="w-[360px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0">
         {header}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {loadingMessage ? (
-            <LoadingSpinner />
-          ) : !selectedMessage ? (
-            <div className="flex items-center justify-center h-full"><p className="text-xs text-zinc-400">Failed to load email</p></div>
+          {loadingMessage || !selectedMessage ? (
+            <div className="p-8">
+              <div className="mb-8 space-y-3">
+                <div className="w-48 h-6 bg-zinc-100 rounded-md animate-pulse" />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-12 h-3 bg-zinc-50 rounded-md animate-pulse" />
+                    <div className="w-32 h-3 bg-zinc-100 rounded-md animate-pulse" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-12 h-3 bg-zinc-50 rounded-md animate-pulse" />
+                    <div className="w-24 h-3 bg-zinc-100 rounded-md animate-pulse" />
+                  </div>
+                </div>
+              </div>
+              <BlockSkeleton />
+            </div>
           ) : (
             <div className="p-4">
               {/* Message meta */}

@@ -58,37 +58,43 @@ class AgentChatRequest(BaseModel):
 # ── Prompts ──────────────────────────────────────────────────────────────
 
 PLAN_PROMPT = (
-    "You are Lightly, an AI workspace agent. You help users manage their project across code, email, calendar, tasks, and Slack.\n\n"
+    "You are Lightly, a specialized AI workspace agent. You help users manage their project EXCLUSIVELY across 5 services: Gmail, Notion, Linear, Slack, and Google Calendar.\n\n"
     "RESPOND WITH EXACTLY ONE JSON OBJECT. No markdown fences, no explanation, no text before or after the JSON.\n\n"
-    "## Rules\n"
-    "1. Pick the SINGLE best tool for the user's request.\n"
-    "2. For WRITE actions (send, create, post), always use the `_propose` variant so the user can confirm.\n"
-    "3. For READ actions (search, list, read), use the direct tool.\n"
-    "4. CRITICAL: If a service is ❌ NOT CONNECTED, you MUST STILL output the tool call JSON. "
-    "The system will automatically show a login button. NEVER refuse with plain text.\n"
-    "5. If the request is conversational, a greeting, or unclear, use `clarify`.\n"
-    "6. If the request involves modifying project source code or UI, use `files_to_read`.\n"
-    "7. When composing emails or messages, write professional, complete content — not placeholders.\n\n"
+    "## Service Mapping Rules (STRICT):\n"
+    "1. TASKS / PROJECT WORKFLOW / ASSIGNMENTS -> Linear ONLY. Map states like 'Todo', 'In Progress', 'Done'.\n"
+    "2. NOTES / SUMMARIES / SPECS / KNOWLEDGE -> Notion ONLY.\n"
+    "3. EVENTS / SCHEDULING / CALENDAR -> Google Calendar ONLY.\n"
+    "4. EMAILS / EXTERNAL COMMUNICATION -> Gmail ONLY.\n"
+    "5. CHAT / TEAM COMMUNICATION -> Slack ONLY.\n\n"
+    "## Semantic Intent Rules:\n"
+    "1. Pick the SINGLE best service. If you need to search for something to act, use `search` or `list` first.\n"
+    "2. If requested to 'Add task to In Progress', find the 'In Progress' state ID from board context and use it in `linear_create_propose`.\n"
+    "3. RICH MENTIONS: Use `[notion:Title|URL]` or `[linear:Title|URL]` when referencing items you found. Example: 'I've added the [linear:Fix Header Bug|https://linear.app/...] task.'\n\n"
+    "## Generic Scoping Rules:\n"
+    "1. Pick the SINGLE best tool for the user's request from the 5 supported services ONLY.\n"
+    "2. CRITICAL: If a service is NOT CONNECTED, you MUST STILL output the tool call JSON. The system will then automatically show a 'Connect' button for the user. NEVER say you cannot access a service with plain text.\n"
+    "3. For WRITE actions (send, create, post, add, move), always use the `_propose` variant so the user can confirm.\n\n"
     "## Tools (return ONE)\n\n"
     "GMAIL:\n"
     '  {"gmail_search": {"query": "...", "max_results": 5}}\n'
     '  {"gmail_read": {"message_id": "..."}}\n'
-    '  {"gmail_send_propose": {"to": "email@example.com", "subject": "...", "body": "full email body"}}\n'
-    '  {"gmail_reply_propose": {"message_id": "...", "body": "reply text"}}\n\n'
+    '  {"gmail_send_propose": {"to": "email@example.com", "subject": "...", "body": "full email body"}}\n\n'
+    "NOTION:\n"
+    '  {"notion_search": {"query": "..."}}\n'
+    '  {"notion_add_note_propose": {"title": "...", "content": "note content"}}\n\n'
+    "LINEAR:\n"
+    '  {"linear_search": {"query": "..."}}\n'
+    '  {"linear_list_board": {}}\n'
+    '  {"linear_create_propose": {"title": "...", "description": "...", "state_id": "optional-state-id"}}\n'
+    '  {"linear_move_issue_propose": {"issue_id": "...", "state_id": "..."}}\n\n'
     "CALENDAR:\n"
-    '  {"calendar_list": {"max_results": 10}}\n'
     '  {"calendar_search": {"query": "..."}}\n'
-    '  {"calendar_create_propose": {"summary": "...", "start_time": "ISO-8601", "description": "..."}}\n\n'
-    "TASKS:\n"
-    '  {"tasks_list": {}}\n'
-    '  {"tasks_create_propose": {"title": "..."}}\n'
-    '  {"tasks_update": {"task_id": "...", "status": "completed"}}\n\n'
+    '  {"calendar_list": {}}\n'
+    '  {"calendar_add_event_propose": {"summary": "...", "start_time": "ISO-8601", "end_time": "ISO-8601", "description": "..."}}\n\n'
     "SLACK:\n"
     '  {"slack_list_channels": {}}\n'
-    '  {"slack_history": {"channel": "channel-name-or-id", "limit": 10}}\n'
+    '  {"slack_history": {"channel": "channel-id", "limit": 10}}\n'
     '  {"slack_send_propose": {"channel": "general", "text": "..."}}\n\n'
-    "CODE EDITING:\n"
-    '  {"files_to_read": ["src/path/to/file.tsx"], "plan": "brief description of changes"}\n\n'
     "GENERAL:\n"
     '  {"clarify": "your helpful response or question", "plan": ""}\n'
 )
@@ -368,7 +374,6 @@ def handle_gmail_send(req, plan, hist):
     subject = details.get("subject")
     body = details.get("body")
     
-    yield sse("status", content=f"Sending email to {to}...")
     try:
         gmail = GmailService(req.googleAccessToken)
         result = gmail.send_message(to, subject, body)
@@ -376,7 +381,7 @@ def handle_gmail_send(req, plan, hist):
         gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{msg_id}" if msg_id else "https://mail.google.com/mail/u/0/#sent"
         
         yield sse("message", 
-            content=f"✅ Email sent successfully to **{to}**.",
+            content=f"Email sent successfully to **{to}**.",
             actions=[{"label": "View in Gmail", "url": gmail_url, "icon": "email", "tab": "gmail"}]
         )
     except Exception as e:
@@ -492,136 +497,49 @@ def handle_calendar_list(req, plan, hist):
     yield sse("done")
 
 
-def handle_calendar_create_propose(req, plan, hist):
-    """Propose creating a calendar event."""
-    if not req.googleAccessToken:
-        yield sse("message", 
-            content="⚠️ Google is not connected. Please connect your account to create calendar events.",
-            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "calendar"}]
-        )
-        yield sse("done")
-        return
-    details = plan["calendar_create_propose"]
+def handle_calendar_add_event_propose(req, plan, hist):
+    details = plan["calendar_add_event_propose"]
     summary = details.get("summary", "")
-    start = details.get("start_time", "")
-    desc = details.get("description", "")
+    start_time = details.get("start_time", "")
+    end_time = details.get("end_time", "")
+    description = details.get("description", "")
     
     yield sse("message", 
-        content=f"I've drafted a calendar event for you:\n\n**Event:** {summary}\n**Time:** {start}\n**Description:** {desc}",
+        content=f"I'll add this event to your calendar:\n\n**{summary}**\nTime: {start_time}",
         actions=[{
-            "label": "Add to Calendar", 
+            "label": "Add Event", 
             "icon": "calendar", 
             "tab": "calendar",
-            "confirmAction": "calendar_create", 
-            "params": {"summary": summary, "start_time": start, "description": desc}
+            "confirmAction": "calendar_add_event", 
+            "params": {"summary": summary, "start_time": start_time, "end_time": end_time, "description": description}
         }]
     )
-    yield sse("done")
 
-def handle_calendar_create(req, plan, hist):
-    """Actually create the event after confirmation."""
-    if not req.googleAccessToken:
-        yield sse("message", 
-            content="⚠️ Google is not connected. Please connect your account to create events.",
-            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "calendar"}]
-        )
-        yield sse("done")
-        return
-
-    details = plan["calendar_create"]
-    yield sse("status", content=f"Adding '{details.get('summary')}' to your calendar...")
-    
+def handle_calendar_add_event(req, plan, hist):
+    params = plan.get("calendar_add_event") or {}
+    action_id = params.get("actionId")
     try:
+        if not req.googleAccessToken: raise Exception("Google Calendar not connected")
         cal = CalendarService(req.googleAccessToken)
-        result = cal.create_event(
-            summary=details.get("summary"),
-            start_time=details.get("start_time"),
-            description=details.get("description", "")
+        event = cal.create_event(
+            summary=params.get("summary"),
+            start_time=params.get("start_time"),
+            end_time=params.get("end_time"),
+            description=params.get("description", "")
         )
-        yield sse("message", 
-            content=f"✅ Event successfully added: **{details.get('summary')}**.",
-            actions=[{"label": "View in Calendar", "url": result.get("htmlLink", "https://calendar.google.com"), "icon": "calendar", "tab": "calendar"}]
-        )
+        
+        if action_id:
+            yield sse("action_success", id=action_id, url=event.get("htmlLink", "https://calendar.google.com"))
+        else:
+            yield sse("message", 
+                content=f"Event created: **{event.get('summary')}**",
+                actions=[{"label": "View in Calendar", "url": event.get("htmlLink"), "icon": "calendar", "tab": "calendar"}]
+            )
     except Exception as e:
         yield sse("message", content=f"Failed to create event: {str(e)}")
     yield sse("done")
 
-
-# ── Tasks tool handlers ────────────────────────────────────────────────
-
-def handle_tasks_list(req, plan, hist):
-    """List Google Tasks."""
-    if not req.googleAccessToken:
-        yield sse("message", 
-            content="⚠️ Google is not connected. Connect your Google account to manage your tasks.",
-            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
-        )
-        yield sse("done")
-        return
-
-    yield sse("status", content="Fetching your to-do list...")
-    try:
-        tasks_svc = TasksService(req.googleAccessToken)
-        tasks = tasks_svc.list_tasks(show_completed=False)
-        if not tasks:
-            yield sse("message", content="You have no pending tasks! ✨")
-            yield sse("done")
-            return
-
-        yield sse("status", content=f"Summarizing {len(tasks)} task(s)...")
-        summary = call_llm([
-            {"role": "system", "content": "You are a professional assistant. Present the user's tasks in a clear list. Group by due date if possible."},
-            *hist,
-            {"role": "user", "content": f"Tasks found:\n{json.dumps(tasks, indent=2)}\n\nUser request: {req.message}"},
-        ])
-        yield sse("message", content=summary)
-    except Exception as e:
-        yield sse("message", content=f"Sorry, I couldn't access your tasks: {str(e)}")
-    yield sse("done")
-
-def handle_tasks_create_propose(req, plan, hist):
-    """Propose creating a task."""
-    if not req.googleAccessToken:
-        yield sse("message", 
-            content="⚠️ Google is not connected. Please connect your account to create tasks.",
-            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
-        )
-        yield sse("done")
-        return
-    details = plan["tasks_create_propose"]
-    title = details.get("title", "")
-    
-    yield sse("message", 
-        content=f"I've drafted a new task for you:\n\n**Task:** {title}",
-        actions=[{
-            "label": "Add Task", 
-            "icon": "external", 
-            "confirmAction": "tasks_create", 
-            "params": {"title": title}
-        }]
-    )
-    yield sse("done")
-
-def handle_tasks_create(req, plan, hist):
-    """Actually create the task after confirmation."""
-    if not req.googleAccessToken:
-        yield sse("message", 
-            content="⚠️ Google is not connected. Please connect your account to create tasks.",
-            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
-        )
-        yield sse("done")
-        return
-
-    details = plan["tasks_create"]
-    yield sse("status", content=f"Adding task '{details.get('title')}'...")
-    
-    try:
-        tasks_svc = TasksService(req.googleAccessToken)
-        tasks_svc.create_task(title=details.get('title'))
-        yield sse("message", content=f"✅ Task created successfully: **{details.get('title')}**.")
-    except Exception as e:
-        yield sse("message", content=f"Failed to create task: {str(e)}")
-    yield sse("done")
+# ── Notion handlers ───────────────────────────────────────────────────
 
 
 def handle_notion_search(req, plan, hist):
@@ -629,7 +547,7 @@ def handle_notion_search(req, plan, hist):
     if not req.notionAccessToken:
         yield sse("message", 
             content="⚠️ Notion is not connected. Please connect your account to search pages.",
-            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "external"}]
+            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "notion"}]
         )
         yield sse("done")
         return
@@ -639,8 +557,17 @@ def handle_notion_search(req, plan, hist):
     try:
         notion = NotionService(req.notionAccessToken)
         results = notion.search(query)
-        yield sse("message", content=f"I found {len(results)} pages matching '{query}'.", 
-                  actions=[{"label": "View Results", "url": results[0]["url"] if results else "https://notion.so"}] )
+        if not results:
+            yield sse("message", content=f"I couldn't find any Notion pages matching '{query}'.")
+            yield sse("done")
+            return
+
+        summary = "**Found these Notion pages:**\n\n"
+        for r in results:
+            summary += f"- {r['title']}\n"
+        
+        yield sse("message", content=summary, 
+                  actions=[{"label": "View first result", "url": results[0]["url"], "icon": "notion"}] )
     except Exception as e:
         yield sse("message", content=f"Sorry, I couldn't search Notion: {str(e)}")
     yield sse("done")
@@ -650,7 +577,7 @@ def handle_notion_add_note_propose(req, plan, hist):
     if not req.notionAccessToken:
         yield sse("message", 
             content="⚠️ Notion is not connected. Please connect your Notion account first.",
-            actions=[{"label": "Connect Notion", "url": "/api/auth/connect?connection=notion", "icon": "external"}]
+            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "notion"}]
         )
         yield sse("done")
         return
@@ -674,8 +601,8 @@ def handle_notion_add_note(req, plan, hist):
     """Actually add the note to the project's Notion page."""
     if not req.notionAccessToken:
         yield sse("message", 
-            content="⚠️ Notion is not connected.",
-            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "external"}]
+            content="⚠️ Notion is not connected. Please connect your account to continue.",
+            actions=[{"label": "Connect Notion", "url": "/api/auth/notion", "icon": "notion"}]
         )
         yield sse("done")
         return
@@ -688,7 +615,6 @@ def handle_notion_add_note(req, plan, hist):
     details = req.message.split(" ", 2)[2] if req.message.startswith("Confirmed: ") else json.dumps(plan["notion_add_note"])
     params = json.loads(details)
     
-    yield sse("status", content="Adding note to Notion...")
     try:
         notion = NotionService(req.notionAccessToken)
         page = notion.create_page(
@@ -696,10 +622,15 @@ def handle_notion_add_note(req, plan, hist):
             title=params.get("title"),
             content=params.get("content", "")
         )
-        yield sse("message", 
-            content=f"✅ Note added successfully: **{params.get('title')}**.",
-            actions=[{"label": "View in Notion", "url": page.get("url", "https://notion.so"), "icon": "notion", "tab": "notion"}]
-        )
+        
+        action_id = params.get("actionId")
+        if action_id:
+            yield sse("action_success", id=action_id, url=page.get("url", "https://notion.so"))
+        else:
+            yield sse("message", 
+                content=f"Note added successfully: **{params.get('title')}**.",
+                actions=[{"label": "View in Notion", "url": page.get("url", "https://notion.so"), "icon": "notion", "tab": "notion"}]
+            )
     except Exception as e:
         yield sse("message", content=f"Failed to add note: {str(e)}")
     yield sse("done")
@@ -746,15 +677,21 @@ def handle_slack_send(req, plan, hist):
     channel = details.get("channel")
     text = details.get("text")
     
-    yield sse("status", content=f"Sending message to #{channel}...")
     try:
         from slack_service import SlackService
         slack = SlackService(req.slackAccessToken)
-        slack.post_message(channel, text)
-        yield sse("message", 
-            content=f"✅ Message sent successfully to **#{channel}**.",
-            actions=[{"label": "View in Slack", "tab": "slack", "icon": "slack"}]
-        )
+        resp = slack.post_message(channel, text)
+        
+        action_id = params.get("actionId")
+        if action_id:
+            # Try to get a direct URL if possible, otherwise link to the channel
+            url = f"https://slack.com/archives/{channel}"
+            yield sse("action_success", id=action_id, url=url)
+        else:
+            yield sse("message", 
+                content=f"Message sent successfully to **#{channel}**.",
+                actions=[{"label": "View in Slack", "tab": "slack", "icon": "slack"}]
+            )
     except Exception as e:
         yield sse("message", content=f"Failed to send Slack message: {str(e)}")
     yield sse("done")
@@ -870,7 +807,11 @@ def handle_linear_create_propose(req, plan, hist):
     details = plan["linear_create_propose"]
     title = details.get("title", "")
     description = details.get("description", "")
+    state_id = details.get("state_id")
     
+    params = {"title": title, "description": description}
+    if state_id: params["state_id"] = state_id
+
     yield sse("message", 
         content=f"I'll create a Linear issue for this:\n\n**Title:** {title}\n{description}",
         actions=[{
@@ -878,7 +819,7 @@ def handle_linear_create_propose(req, plan, hist):
             "icon": "linear", 
             "tab": "linear",
             "confirmAction": "linear_create", 
-            "params": {"title": title, "description": description}
+            "params": params
         }]
     )
     yield sse("done")
@@ -905,25 +846,37 @@ def handle_linear_create(req, plan, hist):
     details = req.message.split(" ", 2)[2] if req.message.startswith("Confirmed: ") else json.dumps(plan["linear_create"])
     params = json.loads(details)
     
-    yield sse("status", content="Creating Linear issue...")
     try:
         linear = LinearService(req.linearAccessToken)
         issue = linear.create_issue(
             team_id=req.linearTeamId,
             title=params.get("title"),
             description=params.get("description", ""),
-            project_id=req.linearProjectId
+            project_id=req.linearProjectId,
+            state_id=params.get("state_id")
         )
-        yield sse("message", 
-            content=f"✅ Issue created: **{issue['identifier']} - {issue['title']}**",
-            actions=[{"label": "View in Linear", "url": issue["url"], "icon": "linear", "tab": "linear"}]
-        )
+        
+        action_id = params.get("actionId")
+        if action_id:
+            yield sse("action_success", id=action_id, url=issue.get("url", "https://linear.app"))
+        else:
+            yield sse("message", 
+                content=f"Issue created: **{issue['identifier']} - {issue['title']}**",
+                actions=[{"label": "View in Linear", "url": issue["url"], "icon": "linear", "tab": "linear"}]
+            )
     except Exception as e:
         yield sse("message", content=f"Failed to create issue: {str(e)}")
     yield sse("done")
 
 def handle_linear_move_issue_propose(req, plan, hist):
     """Propose moving a Linear issue."""
+    if not req.linearAccessToken:
+        yield sse("message", 
+            content="⚠️ Linear is not connected. Please connect your account first.",
+            actions=[{"label": "Connect Linear", "url": "/api/auth/linear", "icon": "linear"}]
+        )
+        yield sse("done")
+        return
     details = plan["linear_move_issue"]
     issue_id = details.get("issue_id")
     state_id = details.get("state_id")
@@ -957,11 +910,10 @@ def handle_linear_move_issue(req, plan, hist):
     details = req.message.split(" ", 2)[2] if req.message.startswith("Confirmed: ") else json.dumps(plan["linear_move_issue"])
     params = json.loads(details)
     
-    yield sse("status", content="Moving issue...")
     try:
         linear = LinearService(req.linearAccessToken)
         issue = linear.update_issue_state(params["issue_id"], params["state_id"])
-        yield sse("message", content=f"✅ Issue **{issue['title']}** moved to **{issue['state']['name']}**.")
+        yield sse("message", content=f"Issue **{issue['title']}** moved to **{issue['state']['name']}**.")
     except Exception as e:
         yield sse("message", content=f"Failed to move issue: {str(e)}")
     yield sse("done")
@@ -985,43 +937,23 @@ def handle_linear_list_board(req, plan, hist):
         yield sse("done")
         return
 
-    yield sse("status", content="Fetching board...")
+    yield sse("status", content="Fetching board and workflow...")
     try:
         linear = LinearService(req.linearAccessToken)
         issues = linear.list_project_issues(req.linearProjectId)
+        states = linear.get_workflow_states(req.linearTeamId)
         
         summary = call_llm([
-            {"role": "system", "content": "Summarize the Linear board state. Group issues by their workflow state concisely."},
+            {"role": "system", "content": "Summarize the Linear board state. Group issues by their workflow state concisely. Use the provided workflow states to understand the column structure."},
             *hist,
-            {"role": "user", "content": f"Issues found in Linear project:\n{json.dumps(issues, indent=2)}\n\nSummarize these for the user."}
+            {"role": "user", "content": f"Linear Data:\n- States: {json.dumps(states)}\n- Issues: {json.dumps(issues, indent=2)}\n\nSummarize the board and mention what states are available."}
         ])
         yield sse("message", content=summary, actions=[{"label": "View Board", "tab": "linear", "icon": "linear"}])
     except Exception as e:
         yield sse("message", content=f"Failed to fetch board: {str(e)}")
     yield sse("done")
 
-def handle_tasks_update(req, plan, hist):
-    """Update task status."""
-    if not req.googleAccessToken:
-        yield sse("message", 
-            content="⚠️ Google is not connected. Please connect your account to update tasks.",
-            actions=[{"label": "Connect Google", "url": "/api/auth/connect?connection=google-oauth2", "icon": "external"}]
-        )
-        yield sse("done")
-        return
-    details = plan["tasks_update"]
-    yield sse("status", content="Updating task status...")
-    try:
-        tasks_svc = TasksService(req.googleAccessToken)
-        task = tasks_svc.update_task(
-            task_id=details.get("task_id"),
-            status=details.get("status"),
-        )
-        status_text = "completed" if task.get("status") == "completed" else "needs action"
-        yield sse("message", content=f"✅ Task **{task.get('title')}** marked as {status_text}.")
-    except Exception as e:
-        yield sse("message", content=f"Sorry, I couldn't update that task: {str(e)}")
-    yield sse("done")
+# ── Main agent (yields SSE events) ─────────────────────────────────────
 
 
 # ── Main agent (yields SSE events) ─────────────────────────────────────
@@ -1052,63 +984,65 @@ def run_agent(req: AgentChatRequest):
             try:
                 # Format: "Confirmed: action_name {JSON_params}"
                 parts = req.message.split(" ", 2)
-                action_name = parts[1]
-                params = json.loads(parts[2])
-                plan = {action_name: params}
-                print(f"[Agent] Processing confirmed action: {action_name}")
-                
-                # Manual routing for confirmed actions
-                if action_name == "gmail_send":
-                    yield from handle_gmail_send(req, plan, [])
-                elif action_name == "calendar_create":
-                    yield from handle_calendar_create(req, plan, [])
-                elif action_name == "tasks_create":
-                    yield from handle_tasks_create(req, plan, [])
-                elif action_name == "notion_add_note":
-                    yield from handle_notion_add_note(req, plan, [])
-                elif action_name == "linear_create":
-                    yield from handle_linear_create(req, plan, [])
-                elif action_name == "linear_move_issue":
-                    yield from handle_linear_move_issue(req, plan, [])
-                elif action_name == "slack_send":
-                    yield from handle_slack_send(req, plan, [])
-                return
+                if len(parts) >= 3:
+                    action_name = parts[1]
+                    params = json.loads(parts[2])
+                    plan = {action_name: params}
+                    print(f"[Agent] Processing confirmed action: {action_name}")
+                    
+                    # Manual routing for confirmed actions
+                    if action_name == "gmail_send":
+                        yield from handle_gmail_send(req, plan, [])
+                    elif action_name == "notion_add_note":
+                        yield from handle_notion_add_note(req, plan, [])
+                    elif action_name == "linear_create":
+                        yield from handle_linear_create(req, plan, [])
+                    elif action_name == "linear_move_issue":
+                        yield from handle_linear_move_issue(req, plan, [])
+                    elif action_name == "slack_send":
+                        yield from handle_slack_send(req, plan, [])
+                    elif action_name == "calendar_add_event":
+                        yield from handle_calendar_add_event(req, plan, [])
+                    return
             except Exception as e:
                 print(f"[Agent] Confirmation failed: {e}")
                 # Fall through to normal planning if intercept fails
 
         # Build context about available services
-        services_context = "\n\nAvailable services for this user:"
+        services_context = "\n\nAvailable services for this user (connected project resources):"
         if req.googleAccessToken:
-            services_context += "\n- ✅ Gmail (connected)"
-            services_context += "\n- ✅ Google Calendar (connected)"
-            services_context += "\n- ✅ Google Tasks (connected)"
+            services_context += "\n- Gmail & Google Calendar (connected)"
         else:
-            services_context += "\n- ❌ Google (not connected)"
+            services_context += "\n- Gmail & Google Calendar (not connected)"
             
         if req.notionAccessToken:
-            services_context += "\n- ✅ Notion (connected)"
+            notion_info = f" (Project Page: {req.notionPageId})" if req.notionPageId else ""
+            services_context += f"\n- Notion (connected){notion_info}"
         else:
-            services_context += "\n- ❌ Notion (not connected)"
+            services_context += "\n- Notion (not connected)"
 
         if req.linearAccessToken:
-            services_context += "\n- ✅ Linear (connected)"
+            linear_info = []
+            if req.linearTeamId: linear_info.append(f"Team: {req.linearTeamId}")
+            if req.linearProjectId: linear_info.append(f"Project: {req.linearProjectId}")
+            services_context += f"\n- Linear (connected) [{', '.join(linear_info)}]"
         else:
-            services_context += "\n- ❌ Linear (not connected)"
+            services_context += "\n- Linear (not connected)"
 
         if req.slackAccessToken:
-            services_context += "\n- ✅ Slack (connected)"
+            slack_info = f" (Channel: {req.slackChannelId})" if req.slackChannelId else ""
+            services_context += f"\n- Slack (connected){slack_info}"
         else:
-            services_context += "\n- ❌ Slack (not connected)"
+            services_context += "\n- Slack (not connected)"
 
         # 1 ── Get file tree via GitHub API
-        yield sse("status", content="Exploring codebase...")
+        yield sse("status", content="Thinking...")
         tree = gh_file_tree(repo, req.branch, req.githubToken)
         file_count = len(tree.splitlines())
         print(f"[Agent] File tree: {file_count} files in {repo}")
 
         # 2 ── Plan: identify relevant files (cheap LLM call)
-        yield sse("status", content="Planning changes...")
+        # We don't show "Planning changes..." here because it might be a workspace task
         hist = [{"role": m.role, "content": m.content} for m in req.history[-6:]]
 
         plan_raw = call_llm([
@@ -1126,6 +1060,10 @@ def run_agent(req: AgentChatRequest):
             return
 
         # ── Route to service handlers ──
+        if "files_to_read" in plan or "files_to_edit" in plan:
+            yield sse("status", content="Exploring codebase...")
+            # Continue with coding task...
+        
         if "gmail_search" in plan:
             yield from handle_gmail_search(req, plan, hist)
             return
@@ -1137,21 +1075,6 @@ def run_agent(req: AgentChatRequest):
             return
         if "gmail_reply_propose" in plan:
             yield from handle_gmail_reply_propose(req, plan, hist)
-            return
-        if "calendar_search" in plan:
-            yield from handle_calendar_search(req, plan, hist)
-            return
-        if "calendar_list" in plan:
-            yield from handle_calendar_list(req, plan, hist)
-            return
-        if "calendar_create_propose" in plan:
-            yield from handle_calendar_create_propose(req, plan, hist)
-            return
-        if "tasks_list" in plan:
-            yield from handle_tasks_list(req, plan, hist)
-            return
-        if "tasks_create_propose" in plan:
-            yield from handle_tasks_create_propose(req, plan, hist)
             return
         if "slack_list_channels" in plan:
             yield from handle_slack_list_channels(req, plan, hist)
@@ -1174,26 +1097,20 @@ def run_agent(req: AgentChatRequest):
         if "linear_create_propose" in plan:
             yield from handle_linear_create_propose(req, plan, hist)
             return
-        if "linear_move_issue" in plan:
+        if "linear_move_issue_propose" in plan:
             yield from handle_linear_move_issue_propose(req, plan, hist)
             return
         if "linear_list_board" in plan:
             yield from handle_linear_list_board(req, plan, hist)
             return
-        if "notion_add_note" in plan:
-            yield from handle_notion_add_note(req, plan, hist)
+        if "calendar_search" in plan:
+            yield from handle_calendar_search(req, plan, hist)
             return
-        if "calendar_create" in plan:
-            yield from handle_calendar_create(req, plan, hist)
+        if "calendar_list" in plan:
+            yield from handle_calendar_list(req, plan, hist)
             return
-        if "tasks_list" in plan:
-            yield from handle_tasks_list(req, plan, hist)
-            return
-        if "tasks_create" in plan:
-            yield from handle_tasks_create(req, plan, hist)
-            return
-        if "tasks_update" in plan:
-            yield from handle_tasks_update(req, plan, hist)
+        if "calendar_add_event_propose" in plan:
+            yield from handle_calendar_add_event_propose(req, plan, hist)
             return
 
         files_to_read = plan.get("files_to_read", [])[:8]

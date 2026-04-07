@@ -6,12 +6,13 @@ import { eq } from "drizzle-orm";
 import { SetupModal } from "./SetupModal";
 import { Sidebar } from "./Sidebar";
 import HomePageClient from "./HomePageClient";
+import LandingPage from "./LandingPage";
 
 export default async function Home() {
   const session = await auth0.getSession();
 
   if (!session) {
-    redirect("/api/auth/login");
+    return <LandingPage />;
   }
 
   const dbUser = await db.query.user.findFirst({
@@ -19,10 +20,10 @@ export default async function Home() {
   });
 
   const profile = {
-    name: dbUser?.name || session.user.name,
-    email: dbUser?.email || session.user.email,
-    image: dbUser?.image || session.user.picture,
-    username: dbUser?.username || session.user.nickname,
+    name: dbUser?.name ?? session.user.name ?? "",
+    email: dbUser?.email ?? session.user.email ?? "",
+    image: dbUser?.image ?? session.user.picture ?? "",
+    username: dbUser?.username ?? session.user.nickname ?? "",
   };
 
   return (

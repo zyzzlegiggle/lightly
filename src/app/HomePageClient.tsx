@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
 
@@ -16,6 +17,8 @@ export default function HomePageClient({ session }: { session: any }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -38,25 +41,25 @@ export default function HomePageClient({ session }: { session: any }) {
 
   return (
     <>
-      <main className="flex-1 overflow-y-auto p-12 bg-zinc-50/50">
+      <main className="flex-1 overflow-y-auto p-12 bg-background">
         <div className="max-w-4xl mx-auto space-y-12 animate-slide-up">
           {/* Hero */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="space-y-3">
               <h1 className="text-4xl font-serif text-foreground tracking-tight italic">
-                Another day for building, <span className="text-accent-primary not-italic font-sans font-bold">{session.user.name?.split(" ")[0]}?</span>
+                another day for building, <span className="text-foreground not-italic font-sans font-bold">{session.user.name?.split(" ")[0].toLowerCase()}?</span>
               </h1>
-              <p className="text-text-muted text-sm px-1">Welcome back. Here are your active building sessions.</p>
+              <p className="text-text-muted text-sm px-1 font-medium italic">welcome back. continue your projects here.</p>
             </div>
 
             <button
               onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center gap-2.5 bg-gradient-to-r from-zinc-800 to-zinc-950 text-white font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md active:scale-[0.98] shrink-0"
+              className="inline-flex items-center gap-2.5 bg-black text-white font-bold px-6 py-3 rounded-2xl hover:opacity-80 transition-all shadow-sm active:scale-[0.98] shrink-0"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
               </svg>
-              Link New Repository
+              link new repository
             </button>
           </div>
 
@@ -81,7 +84,7 @@ export default function HomePageClient({ session }: { session: any }) {
                   </div>
                   <h3 className="text-lg font-bold text-text-primary">No projects yet</h3>
                   <p className="text-text-muted mt-1 max-w-[240px]">Link a GitHub repository to start building your application.</p>
-                  <button 
+                  <button
                     onClick={() => setIsModalOpen(true)}
                     className="mt-6 text-sm font-bold text-accent-primary hover:underline underline-offset-4"
                   >
@@ -92,10 +95,13 @@ export default function HomePageClient({ session }: { session: any }) {
                 projects.map((proj) => {
                   const name = repoName(proj.githubUrl);
                   return (
-                    <Link
+                    <button
                       key={proj.id}
-                      href={`/project/${proj.id}`}
-                      className="group bg-white border border-border-subtle rounded-2xl p-6 hover:shadow-lg hover:border-accent-primary/20 transition-all duration-300"
+                      onClick={() => {
+                        setIsNavigating(true);
+                        router.push(`/project/${proj.id}`);
+                      }}
+                      className="group text-left bg-white border border-border-subtle rounded-2xl p-6 hover:shadow-lg hover:border-accent-primary/20 transition-all duration-300 w-full"
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center text-xl font-bold text-zinc-500 group-hover:bg-accent-primary group-hover:text-white transition-all duration-300">
@@ -113,7 +119,7 @@ export default function HomePageClient({ session }: { session: any }) {
                           <svg className="w-5 h-5 text-accent-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
                         </div>
                       </div>
-                    </Link>
+                    </button>
                   );
                 })
               )}
@@ -127,6 +133,34 @@ export default function HomePageClient({ session }: { session: any }) {
         onClose={() => setIsModalOpen(false)}
         session={session}
       />
+
+      {isNavigating && (
+        <div className="fixed inset-0 z-[1000] bg-white flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="max-w-md w-full flex flex-col items-center">
+            <div className="relative mb-8 group">
+              <div className="absolute inset-0 bg-accent-primary/10 rounded-3xl blur-2xl group-hover:bg-accent-primary/20 transition-all opacity-0 animate-in fade-in zoom-in delay-300 duration-1000 fill-mode-forwards" />
+              <img src="/logo.png" alt="Lightly" className="h-16 relative z-10 animate-pulse-subtle shadow-[0_0_40px_-10px_rgba(0,0,0,0.1)] rounded-2xl" />
+            </div>
+            
+            <div className="space-y-4 w-full text-center">
+              <h1 className="text-2xl font-serif tracking-tight italic text-zinc-900">
+                opening <span className="font-sans font-bold not-italic">project...</span>
+              </h1>
+              <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden shadow-inner max-w-xs mx-auto">
+                <div className="h-full bg-accent-primary animate-[loading-bar_1.5s_infinite]" />
+              </div>
+              <p className="text-zinc-500 text-sm font-medium animate-pulse">Initializing workspace</p>
+            </div>
+          </div>
+          
+          <style jsx>{`
+            @keyframes loading-bar {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+            }
+          `}</style>
+        </div>
+      )}
     </>
   );
 }

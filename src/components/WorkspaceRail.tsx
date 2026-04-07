@@ -82,8 +82,8 @@ export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
     return () => window.removeEventListener("highlight-tab", handler);
   }, []);
 
-  const topTabs = tabs; // Move all tabs to the top section to be grouped together
-  const bottomTabs: typeof tabs = []; // Empty the bottom section for now
+  const topTabs = tabs.filter(tab => tab.id !== "gmail" && tab.id !== "calendar");
+  const bottomTabs = tabs.filter(tab => tab.id === "gmail" || tab.id === "calendar");
 
   return (
     <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 shrink-0">

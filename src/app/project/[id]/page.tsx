@@ -27,6 +27,7 @@ export default function WorkspacePage() {
   const [iframeKey, setIframeKey] = useState(0);
   const [currentPath, setCurrentPath] = useState("/");
   const [pathInput, setPathInput] = useState("/");
+  const [isInitializing, setIsInitializing] = useState(true);
   const [iframeStatus, setIframeStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewError, setPreviewError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -62,6 +63,7 @@ export default function WorkspacePage() {
   // ── Polling ──
   useEffect(() => {
     let active = true;
+    let firstFetchDone = false;
     const poll = async () => {
       try {
         const res = await fetch(`/api/projects/${projectId}/status`);
@@ -71,6 +73,11 @@ export default function WorkspacePage() {
         setStatusData(data);
         if (data.liveUrl) {
           setPreviewUrl(data.liveUrl);
+        }
+        if (!firstFetchDone) {
+          firstFetchDone = true;
+          // Small delay for smooth transition
+          setTimeout(() => setIsInitializing(false), 800);
         }
         const interval = data.phase === "ACTIVE" ? 30000 : 4000;
         if (active) setTimeout(poll, interval);
@@ -190,6 +197,12 @@ export default function WorkspacePage() {
     }, 1500);
   }, []);
 
+  // ── Sync/Refresh state ──
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleActionSuccess = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+  }, []);
+
   // ── Changes management ──
   const handleChangesProposed = useCallback((newChanges: any[]) => {
     const mapped: PendingChange[] = newChanges.map((ch: any, i: number) => ({
@@ -263,6 +276,29 @@ export default function WorkspacePage() {
     }
   }, [pendingChanges, projectId]);
 
+  if (isInitializing) {
+    return (
+      <div className="fixed inset-0 z-[1000] bg-white flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
+        <div className="max-w-md w-full flex flex-col items-center">
+          <div className="relative mb-8 group">
+            <div className="absolute inset-0 bg-accent-primary/10 rounded-3xl blur-2xl group-hover:bg-accent-primary/20 transition-all opacity-0 animate-in fade-in zoom-in delay-300 duration-1000 fill-mode-forwards" />
+            <img src="/logo.png" alt="Lightly" className="h-16 relative z-10 animate-pulse-subtle shadow-[0_0_40px_-10px_rgba(0,0,0,0.1)] rounded-2xl" />
+          </div>
+          
+          <div className="space-y-4 w-full text-center">
+            <h1 className="text-2xl font-serif tracking-tight italic text-zinc-900">
+              Opening <span className="font-sans font-bold not-italic">{statusData?.projectName || "your project"}...</span>
+            </h1>
+            <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden shadow-inner max-w-xs mx-auto">
+              <div className="h-full bg-accent-primary animate-[loading-bar_1.5s_infinite]" />
+            </div>
+            <p className="text-zinc-500 text-sm font-medium animate-pulse">Initializing workspace</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-100 font-sans">
       {/* ── Top nav ── */}
@@ -297,7 +333,7 @@ export default function WorkspacePage() {
                   {projects.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => { router.push(`/project/${p.id}`); setIsSwitcherOpen(false); }}
+                      onClick={() => { router.push(`/project/${p.id}`); setIsSwitcherOpen(false); setIsInitializing(true); }}
                       className={`w-full text-left px-3 py-2 text-sm transition-colors flex flex-col ${p.id === projectId ? "bg-zinc-50 text-accent-primary font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                         }`}
                     >
@@ -371,16 +407,17 @@ export default function WorkspacePage() {
             onToggle={() => setActiveTab(null)}
             onDeployTriggered={handleDeployTriggered}
             onChangesProposed={handleChangesProposed}
+            onActionSuccess={handleActionSuccess}
             onTabChange={handleTabChange}
             currentPage={currentPath}
           />
         )}
-        {activeTab === "gmail" && <GmailPanel />}
-        {activeTab === "calendar" && <CalendarPanel />}
+        {activeTab === "gmail" && <GmailPanel refreshKey={refreshKey} />}
+        {activeTab === "calendar" && <CalendarPanel refreshKey={refreshKey} />}
 
-        {activeTab === "slack" && <SlackPanel projectId={projectId} />}
-        {activeTab === "linear" && <LinearPanel projectId={projectId} />}
-        {activeTab === "notion" && <NotionPanel projectId={projectId} />}
+        {activeTab === "slack" && <SlackPanel projectId={projectId} refreshKey={refreshKey} />}
+        {activeTab === "linear" && <LinearPanel projectId={projectId} refreshKey={refreshKey} />}
+        {activeTab === "notion" && <NotionPanel projectId={projectId} refreshKey={refreshKey} />}
 
         {/* ── Browser preview ── */}
         <div className="flex-1 overflow-hidden p-3 flex flex-col gap-0">
@@ -483,7 +520,7 @@ export default function WorkspacePage() {
                     ref={iframeRef}
                     key={iframeKey}
                     src={iframeSrc}
-                    className="w-full h-full border-none bg-white"
+                    className="w-full h-full border-none bg-white font-sans"
                     title="Live Preview"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
                     allow="clipboard-read; clipboard-write; camera; microphone; geolocation; fullscreen"

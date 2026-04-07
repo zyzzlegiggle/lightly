@@ -21,6 +21,7 @@ interface ChatMessage {
   actions?: ChatAction[];
   timestamp: number;
   attachments?: UploadedFile[];
+  isSilent?: boolean;
 }
 
 interface UploadedFile {
@@ -38,6 +39,7 @@ interface ChatSidebarProps {
   onToggle: () => void;
   onDeployTriggered?: () => void;
   onChangesProposed?: (changes: any[]) => void;
+  onActionSuccess?: () => void;
   onTabChange?: (tab: any) => void;
   currentPage?: string;
 }
@@ -75,30 +77,101 @@ function isImageType(contentType: string): boolean {
 
 function formatContent(content: string) {
   if (!content) return null;
-  // Simple bold markdown
-  const parts = content.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, i) => {
+
+  // Regex to match:
+  // 1. **Bold**
+  // 2. [notion:Title|URL]
+  // 3. [linear:Title|URL]
+  const regex = /(\*\*.*?\*\*)|(\[(notion|linear):([^|\]]+)\|([^\]]+)\])/g;
+  const parts = content.split(regex);
+
+  // Split results in many null/undefined parts due to groups, filter them
+  const result: React.ReactNode[] = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === undefined || part === null || part === "") continue;
+
+    // Check if it's a bold match (e.g. "**text**")
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
+      result.push(<strong key={i} className="font-bold text-zinc-900">{part.slice(2, -2)}</strong>);
+      continue;
     }
-    return part;
-  });
+
+    // Check if next parts are the capture groups for a mention
+    // regex groups: [full, bold, full_mention, service, title, url]
+    // Due to how split works with multiple groups:
+    // parts[i] = full match
+    // parts[i+1] = bold group (if matched)
+    // parts[i+2] = full mention group (if matched)
+    // parts[i+3] = service (if matched)
+    // parts[i+4] = title (if matched)
+    // parts[i+5] = url (if matched)
+
+    if (part.startsWith("[") && (part.includes("notion:") || part.includes("linear:"))) {
+      const service = parts[i + 3];
+      const title = parts[i + 4];
+      const url = parts[i + 5];
+
+      if (service && title && url) {
+        result.push(
+          <a
+            key={i}
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold mx-0.5 transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 border ${service === "notion"
+                ? "bg-zinc-100/80 text-zinc-800 border-zinc-200 hover:bg-zinc-100"
+                : "bg-indigo-50/80 text-indigo-700 border-indigo-100 hover:bg-indigo-100/90"
+              }`}
+          >
+            {service === "notion" ? (
+              <div className="w-3.5 h-3.5 bg-white rounded-md flex items-center justify-center shadow-sm">
+                <svg className="w-2.5 h-2.5 text-zinc-900" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4.459 4.208c.739.062 1.346.335 1.83 1.054l13.064 1.705V19.78c-1.125-.45-2.156-.632-3.111-.53l-11.834-1.288c-.689-.061-1.218-.363-1.583-1.026V5.378c.365.176.924.312 1.634.33V4.208zm1.63 1.332v12.01c0 .248.163.502.483.61l10.97 1.155c.346 0 .54-.254.54-.502V7.12L6.152 5.66c-.033-.03-.06-.062-.063-.12zm2.083 2.502h2.247v5.69l3.073-5.69h2.518l-3.332 6.002 3.655 6.002H14.19l-3.398-5.69v5.69H8.172V8.042z" />
+                </svg>
+              </div>
+            ) : (
+              <div className="w-3.5 h-3.5 bg-white rounded-md flex items-center justify-center shadow-sm">
+                <svg className="w-2.5 h-2.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
+                </svg>
+              </div>
+            )}
+            {title}
+          </a>
+        );
+        i += 5; // Skip the groups
+        continue;
+      }
+    }
+
+    // Regular text (if not bold or mention)
+    if (!parts[i - 1]?.startsWith("[") && !parts[i - 1]?.startsWith("**")) {
+      result.push(part);
+    }
+  }
+
+  return result;
 }
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export function ChatSidebar({ 
-  projectId, 
-  isCollapsed, 
-  onToggle, 
-  onDeployTriggered, 
-  onChangesProposed, 
+export function ChatSidebar({
+  projectId,
+  isCollapsed,
+  onToggle,
+  onDeployTriggered,
+  onChangesProposed,
+  onActionSuccess,
   onTabChange,
-  currentPage = "/" 
+  currentPage = "/"
 }: ChatSidebarProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmedActionIds, setConfirmedActionIds] = useState<Set<string>>(new Set());
+  const [actionSuccessUrls, setActionSuccessUrls] = useState<Record<string, string>>({});
   const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -238,21 +311,23 @@ export function ChatSidebar({
 
   // ── Send message ──
 
-  const sendMessage = async (overrideText?: string) => {
+  const sendMessage = async (overrideText?: string, silent = false) => {
     const text = (overrideText || input).trim();
     if ((!text && pendingFiles.length === 0) || isLoading) return;
 
     const attachments = [...pendingFiles];
     const displayText = text || (attachments.length > 0 ? `Uploaded ${attachments.length} file(s) for reference` : "");
 
-    const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`,
-      role: "user",
-      content: displayText,
-      timestamp: Date.now(),
-      attachments: attachments.length > 0 ? attachments : undefined,
-    };
-    setMessages((p) => [...p, userMsg]);
+    if (!silent) {
+      const userMsg: ChatMessage = {
+        id: `u-${Date.now()}`,
+        role: "user",
+        content: displayText,
+        timestamp: Date.now(),
+        attachments: attachments.length > 0 ? attachments : undefined,
+      };
+      setMessages((p) => [...p, userMsg]);
+    }
     setInput("");
     setPendingFiles([]);
     setIsLoading(true);
@@ -260,7 +335,7 @@ export function ChatSidebar({
     const assistantId = `a-${Date.now()}`;
     let assistantContent = "";
 
-    setMessages((p) => [...p, { id: assistantId, role: "assistant", content: "", timestamp: Date.now() }]);
+    setMessages((p) => [...p, { id: assistantId, role: "assistant", content: "", timestamp: Date.now(), isSilent: silent }]);
 
     try {
       const res = await fetch(`/api/projects/${projectId}/chat`, {
@@ -321,6 +396,10 @@ export function ChatSidebar({
               // Pass changes up to parent for the ChangesPanel
               onChangesProposed?.(evt.changes || []);
               onDeployTriggered?.(); // Preview already synced
+              onActionSuccess?.();
+            } else if (evt.type === "action_success") {
+              setActionSuccessUrls((p: Record<string, string>) => ({ ...p, [evt.id]: evt.url }));
+              onActionSuccess?.();
             } else if (evt.type === "done") {
               setMessages((p) => p.filter((m) => m.role !== "status"));
             }
@@ -409,31 +488,6 @@ export function ChatSidebar({
             <p className="text-xs text-zinc-500 leading-relaxed max-w-[240px]">
               Describe what you want to build or modify.
             </p>
-            <div className="mt-5 flex flex-wrap gap-1.5 justify-center">
-              {["Upload a mockup", "Change the design", "Rework the UI"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    if (s === "Upload a mockup") {
-                      fileInputRef.current?.click();
-                    } else {
-                      setInput(s);
-                      textareaRef.current?.focus();
-                    }
-                  }}
-                  className="text-[11px] text-zinc-500 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1 rounded-full transition-colors"
-                >
-                  {s === "Upload a mockup" ? (
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      {s}
-                    </span>
-                  ) : s}
-                </button>
-              ))}
-            </div>
           </div>
         ) : (
           <div className="p-4 space-y-3">
@@ -489,79 +543,124 @@ export function ChatSidebar({
                         {msg.content ? (
                           <>
                             {formatContent(msg.content)}
-                            {/* ── Action Buttons (Gmail/Calendar) INSIDE bubble ── */}
+                            {/* ── Action Buttons INSIDE bubble ── */}
                             {msg.actions && msg.actions.length > 0 && (
                               <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-zinc-200/50">
-                                {msg.actions.map((action, i) => (
-                                  <button
-                                    key={i}
-                                    onClick={(e) => {
-                                      if (action.confirmAction) {
-                                        e.preventDefault();
-                                        // Execute confirmed action
-                                        const confirmMsg = `Confirmed: ${action.confirmAction} ${JSON.stringify(action.params)}`;
-                                        sendMessage(confirmMsg);
-                                        
-                                        if (action.tab && onTabChange) {
-                                          onTabChange(action.tab);
-                                          // Trigger highlight via window event or ref if shared
-                                          window.dispatchEvent(new CustomEvent("highlight-tab", { detail: { tab: action.tab } }));
-                                        }
-                                      } else if (action.tab && onTabChange) {
-                                        e.preventDefault();
-                                        onTabChange(action.tab);
-                                      } else if (action.url) {
-                                        window.open(action.url, "_blank");
-                                      }
-                                    }}
-                                    className="inline-flex items-center gap-2 bg-white border border-zinc-200 hover:border-zinc-800 hover:bg-zinc-100 px-3 py-1.5 rounded-lg transition-all shadow-sm group text-left"
-                                  >
-                                    {action.icon === "calendar" && (
-                                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                    )}
-                                    {action.icon === "email" && (
-                                      <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                    )}
-                                    {action.icon === "linear" && (
-                                      <svg className="w-3.5 h-3.5 text-zinc-900" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="12" y1="17" x2="12" y2="22" />
-                                        <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
-                                      </svg>
-                                    )}
-                                    {action.icon === "slack" && (
-                                      <svg className="w-3.5 h-3.5" viewBox="0 0 54 54" fill="none">
-                                        <path d="M19.712 33.867a4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286 4.285 4.285 0 014.286-4.285h4.285v4.285z" fill="#E01E5A"/>
-                                        <path d="M21.857 33.867a4.285 4.285 0 014.286-4.285 4.285 4.285 0 014.285 4.285v10.714a4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286V33.867z" fill="#E01E5A"/>
-                                        <path d="M26.143 19.712a4.285 4.285 0 01-4.286-4.285 4.285 4.285 0 014.286-4.286 4.285 4.285 0 014.285 4.286v4.285H26.143z" fill="#36C5F0"/>
-                                        <path d="M26.143 21.857a4.285 4.285 0 014.285 4.286 4.285 4.285 0 01-4.285 4.285H15.427a4.285 4.285 0 01-4.286-4.285 4.285 4.285 0 014.286-4.286H26.143z" fill="#36C5F0"/>
-                                        <path d="M40.298 26.143a4.285 4.285 0 014.285 4.285 4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286V26.143h4.286z" fill="#2EB67D"/>
-                                        <path d="M38.153 26.143a4.285 4.285 0 01-4.285-4.286 4.285 4.285 0 014.285-4.285h10.714a4.285 4.285 0 014.286 4.285 4.285 4.285 0 01-4.286 4.286H38.153z" fill="#2EB67D"/>
-                                        <path d="M33.867 40.298a4.285 4.285 0 014.286 4.285 4.285 4.285 0 01-4.286 4.286 4.285 4.285 0 01-4.285-4.286V40.298h4.285z" fill="#ECB22E"/>
-                                        <path d="M33.867 38.153a4.285 4.285 0 01-4.285 4.285 4.285 4.285 0 01-4.286-4.285V27.44a4.285 4.285 0 014.286-4.286 4.285 4.285 0 014.285 4.286v10.714z" fill="#ECB22E"/>
-                                      </svg>
-                                    )}
-                                    {(!action.icon || action.icon === "external") && (
-                                      <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                      </svg>
-                                    )}
-                                    <span className="text-[11px] font-semibold text-zinc-900">{action.label}</span>
-                                  </button>
-                                ))}
+                                {msg.actions.map((action, i) => {
+                                  const actionId = `${msg.id}-${i}`;
+                                  const successUrl = actionSuccessUrls[actionId];
+                                  const isConfirmed = confirmedActionIds.has(actionId);
+
+                                  const getSuccessLabel = (label: string) => {
+                                    const low = label.toLowerCase();
+                                    if (low.includes("slack") || low.includes("send")) return "Open Slack";
+                                    if (low.includes("notion") || low.includes("note") || low.includes("add")) return "Open Notion";
+                                    if (low.includes("linear") || low.includes("issue") || low.includes("create")) return "Open Linear";
+                                    return "Open in Service";
+                                  };
+
+                                  return (
+                                    <div key={i} className="flex items-center gap-2">
+                                      <button
+                                        key={i}
+                                        onClick={(e) => {
+                                          if (successUrl) {
+                                            e.preventDefault();
+                                            if (action.tab && onTabChange) {
+                                              onTabChange(action.tab);
+                                            } else {
+                                              window.open(successUrl, "_blank");
+                                            }
+                                          } else if (!isConfirmed && action.confirmAction) {
+                                            e.preventDefault();
+                                            setConfirmedActionIds(prev => new Set(prev).add(actionId));
+                                            const confirmMsg = `Confirmed: ${action.confirmAction} ${JSON.stringify({ ...action.params, actionId })}`;
+                                            sendMessage(confirmMsg, true);
+                                          } else if (action.tab && onTabChange) {
+                                            e.preventDefault();
+                                            onTabChange(action.tab);
+                                          } else if (action.url) {
+                                            window.open(action.url, "_blank");
+                                          }
+                                        }}
+                                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all shadow-sm group text-left text-[11px] font-bold border ${successUrl
+                                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                                            : isConfirmed
+                                              ? "bg-zinc-50 border-zinc-100 text-zinc-400 cursor-wait"
+                                              : "bg-white border-zinc-200 hover:border-zinc-800 hover:bg-zinc-100 text-zinc-700"
+                                          }`}
+                                      >
+                                        {successUrl ? (
+                                          <span className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
+                                            {getSuccessLabel(action.label)}
+                                          </span>
+                                        ) : isConfirmed ? (
+                                          <span className="flex items-center gap-1.5">
+                                            <div className="w-2.5 h-2.5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                                            Processing...
+                                          </span>
+                                        ) : (
+                                          <>
+                                            {action.icon === "calendar" && (
+                                              <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                              </svg>
+                                            )}
+                                            {action.icon === "email" && (
+                                              <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                              </svg>
+                                            )}
+                                            {action.icon === "notion" && (
+                                              <svg className="w-3.5 h-3.5 text-zinc-800" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M4.459 4.208c.739.062 1.346.335 1.83 1.054l13.064 1.705V19.78c-1.125-.45-2.156-.632-3.111-.53l-11.834-1.288c-.689-.061-1.218-.363-1.583-1.026V5.378c.365.176.924.312 1.634.33V4.208zm1.63 1.332v12.01c0 .248.163.502.483.61l10.97 1.155c.346 0 .54-.254.54-.502V7.12L6.152 5.66c-.033-.03-.06-.062-.063-.12zm2.083 2.502h2.247v5.69l3.073-5.69h2.518l-3.332 6.002 3.655 6.002H14.19l-3.398-5.69v5.69H8.172V8.042z" />
+                                              </svg>
+                                            )}
+                                            {action.icon === "linear" && (
+                                              <svg className="w-3.5 h-3.5 text-zinc-900" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="12" y1="17" x2="12" y2="22" />
+                                                <path d="M5 17h14v-2l-1-7V5a2 2 0 0 1 2-2H4a2 2 0 0 1 2 2v3l-1 7v2z" />
+                                              </svg>
+                                            )}
+                                            {action.icon === "slack" && (
+                                              <svg className="w-3.5 h-3.5" viewBox="0 0 54 54" fill="none">
+                                                <path d="M19.712 33.867a4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286 4.285 4.285 0 014.286-4.285h4.285v4.285z" fill="#E01E5A" />
+                                                <path d="M21.857 33.867a4.285 4.285 0 014.286-4.285 4.285 4.285 0 014.285 4.285v10.714a4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286V33.867z" fill="#E01E5A" />
+                                                <path d="M26.143 19.712a4.285 4.285 0 01-4.286-4.285 4.285 4.285 0 014.286-4.286 4.285 4.285 0 014.285 4.286v4.285H26.143z" fill="#36C5F0" />
+                                                <path d="M26.143 21.857a4.285 4.285 0 014.285 4.286 4.285 4.285 0 01-4.285 4.285H15.427a4.285 4.285 0 01-4.286-4.285 4.285 4.285 0 014.286-4.286H26.143z" fill="#36C5F0" />
+                                                <path d="M40.298 26.143a4.285 4.285 0 014.285 4.285 4.285 4.285 0 01-4.285 4.286 4.285 4.285 0 01-4.286-4.286V26.143h4.286z" fill="#2EB67D" />
+                                                <path d="M38.153 26.143a4.285 4.285 0 01-4.285-4.286 4.285 4.285 0 014.285-4.285h10.714a4.285 4.285 0 014.286 4.285 4.285 4.285 0 01-4.286 4.286H38.153z" fill="#2EB67D" />
+                                                <path d="M33.867 40.298a4.285 4.285 0 014.286 4.285 4.285 0 01-4.286 4.286 4.285 4.285 0 01-4.285-4.286V40.298h4.285z" fill="#ECB22E" />
+                                                <path d="M33.867 38.153a4.285 4.285 0 01-4.285 4.285 4.285 4.285 0 01-4.286-4.285V27.44a4.285 4.285 0 014.286-4.286 4.285 4.285 0 014.285 4.286v10.714z" fill="#ECB22E" />
+                                              </svg>
+                                            )}
+                                            {(!action.icon || action.icon === "external") && (
+                                              <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                              </svg>
+                                            )}
+                                            <span className="text-[11px] font-semibold text-zinc-900">{action.label}</span>
+                                          </>
+                                        )}
+                                      </button>
+                                      {successUrl && (
+                                        <span className="text-[10px] text-emerald-600 font-medium animate-in slide-in-from-left-1 duration-300">
+                                          Success!
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </>
-                        ) : (
+                        ) : !msg.isSilent ? (
                           <span className="flex gap-1 py-0.5">
                             <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
                             <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
                             <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" />
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       {/* ── Changes description (designer-friendly) ── */}

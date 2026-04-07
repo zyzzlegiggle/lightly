@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { CardSkeleton, BlockSkeleton } from "./LoaderComponents";
 
 interface NotionPage {
   id: string;
@@ -18,6 +19,7 @@ interface NotionBlock {
 
 interface NotionPanelProps {
   projectId: string;
+  refreshKey?: number;
 }
 
 type BlockType = "paragraph" | "heading_2" | "heading_3" | "bulleted_list_item" | "numbered_list_item" | "to_do" | "code" | "divider";
@@ -39,7 +41,7 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-export function NotionPanel({ projectId }: NotionPanelProps) {
+export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [pageId, setPageId] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function NotionPanel({ projectId }: NotionPanelProps) {
 
   useEffect(() => {
     if (connected && pageId) loadNotes();
-  }, [connected, pageId, loadNotes]);
+  }, [connected, pageId, loadNotes, refreshKey]);
 
   // Init project page
   const handleInit = async () => {
@@ -290,133 +292,157 @@ export function NotionPanel({ projectId }: NotionPanelProps) {
     );
   }
 
-  // ── Editor modal (overlays the panel) ──
+  // ── Render: Editor view ──
   if (editingNote) {
     return (
       <div className="w-[340px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0">
         {/* Editor header */}
-        <div className="h-10 border-b border-zinc-100 flex items-center px-3 gap-2 shrink-0">
+        <div className="h-12 border-b border-zinc-100 flex items-center px-4 gap-3 shrink-0">
           <button
             onClick={() => { saveNote(); setEditingNote(null); loadNotes(); }}
-            className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all"
+            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all"
+            title="Back to list"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <span className="text-sm font-semibold text-zinc-800 truncate flex-1">
+          <span className="text-[13px] font-bold text-zinc-800 truncate flex-1">
             {editingNote.title}
           </span>
           <button
             onClick={saveNote}
             disabled={saving}
-            className="text-[10px] font-semibold text-zinc-500 hover:text-zinc-800 px-2 py-1 rounded-lg hover:bg-zinc-100 transition-all"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm ${
+              saving 
+                ? "bg-zinc-100 text-zinc-400 cursor-not-allowed" 
+                : "bg-zinc-900 text-white hover:bg-zinc-800 active:scale-95"
+            }`}
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? (
+              <div className="w-3 h-3 border-2 border-zinc-300 border-t-zinc-100 rounded-full animate-spin" />
+            ) : "Save"}
           </button>
         </div>
 
-        {/* Block type toolbar */}
-        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-zinc-50 overflow-x-auto shrink-0">
+        {/* Floating Tooltips or simple Toolbar */}
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-zinc-50 overflow-x-auto shrink-0 scrollbar-hide">
           {BLOCK_TYPES.map((bt) => (
             <button
               key={bt.type}
               onClick={() => {
-                // Add a new block of this type at the bottom
                 setEditorBlocks((prev) => [...prev, { type: bt.type, content: "" }]);
                 setTimeout(() => {
-                  const inputs = document.querySelectorAll("[data-block-input]");
-                  (inputs[inputs.length - 1] as HTMLElement)?.focus();
+                  const items = document.querySelectorAll("[data-block-item]");
+                  const last = items[items.length - 1];
+                  const textarea = last?.querySelector("textarea");
+                  textarea?.focus();
                 }, 50);
               }}
-              className="text-[9px] font-bold text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 px-1.5 py-1 rounded transition-colors whitespace-nowrap"
-              title={bt.label}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-50 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all text-[11px] font-medium border border-zinc-100 whitespace-nowrap"
             >
-              {bt.icon}
+              <span className="opacity-60">{bt.icon}</span>
+              {bt.label}
             </button>
           ))}
         </div>
 
         {/* Editor content */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3">
+        <div className="flex-1 overflow-y-auto min-h-0 bg-white/50 backdrop-blur-sm">
           {loadingContent ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="w-5 h-5 border-2 border-zinc-200 border-t-zinc-500 rounded-full animate-spin" />
+            <div className="p-8 space-y-6">
+              {[1, 2, 3].map((i) => (
+                <BlockSkeleton key={i} />
+              ))}
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="p-5 space-y-4 max-w-full">
               {editorBlocks.map((block, i) => (
-                <div key={i} className="group flex items-start gap-1">
-                  {/* Block type indicator / drag handle */}
-                  <div className="shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <select
-                      value={block.type}
-                      onChange={(e) => updateBlockType(i, e.target.value as BlockType)}
-                      className="text-[8px] text-zinc-300 bg-transparent outline-none cursor-pointer w-7 appearance-none"
-                      title="Block type"
-                    >
-                      {BLOCK_TYPES.map((bt) => (
-                        <option key={bt.type} value={bt.type}>{bt.icon}</option>
-                      ))}
-                    </select>
+                <div key={i} data-block-item className="group relative flex items-start gap-3 pl-2">
+                  {/* Left gutter (drag/type indicator) */}
+                  <div className="absolute left-0 top-1.5 flex flex-col items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-4 h-4 text-zinc-300">
+                      <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16" />
+                      </svg>
+                    </div>
                   </div>
 
-                  {/* Block content */}
+                  {/* Content area */}
                   <div className="flex-1 min-w-0">
                     {block.type === "divider" ? (
-                      <div className="h-px bg-zinc-200 my-2" />
-                    ) : block.type === "to_do" ? (
-                      <div className="flex items-start gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={block.checked || false}
-                          onChange={() => toggleTodoCheck(i)}
-                          className="mt-1 rounded border-zinc-300"
-                        />
-                        <input
+                      <div className="h-0.5 bg-zinc-100 rounded-full my-4" />
+                    ) : (
+                      <div className="flex items-start gap-2.5">
+                        {block.type === "to_do" && (
+                          <div className="pt-0.5 shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={block.checked || false}
+                              onChange={() => toggleTodoCheck(i)}
+                              className="w-4 h-4 rounded border-zinc-200 text-zinc-900 focus:ring-zinc-500 transition-all cursor-pointer"
+                            />
+                          </div>
+                        )}
+                        {block.type === "bulleted_list_item" && (
+                          <div className="pt-1.5 shrink-0 text-zinc-400 font-bold text-xs">•</div>
+                        )}
+                        {block.type === "numbered_list_item" && (
+                          <div className="pt-1.5 shrink-0 text-zinc-400 font-bold text-[11px] min-w-[14px]">{i + 1}.</div>
+                        )}
+                        
+                        <textarea
                           data-block-input
-                          type="text"
+                          rows={1}
                           value={block.content}
-                          onChange={(e) => updateBlock(i, e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e, i)}
-                          className={`flex-1 text-[12px] bg-transparent outline-none ${
-                            block.checked ? "line-through text-zinc-400" : "text-zinc-700"
+                          onChange={(e) => {
+                            updateBlock(i, e.target.value);
+                            e.target.style.height = "auto";
+                            e.target.style.height = e.target.scrollHeight + "px";
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              addBlockAfter(i);
+                              setTimeout(() => {
+                                const inputs = document.querySelectorAll("[data-block-input]");
+                                (inputs[i+1] as HTMLElement)?.focus();
+                              }, 50);
+                            }
+                            if (e.key === "Backspace" && block.content === "" && editorBlocks.length > 1) {
+                              e.preventDefault();
+                              removeBlock(i);
+                              setTimeout(() => {
+                                const inputs = document.querySelectorAll("[data-block-input]");
+                                (inputs[Math.max(0, i-1)] as HTMLElement)?.focus();
+                              }, 50);
+                            }
+                          }}
+                          placeholder={
+                            block.type.startsWith("heading") ? "Heading..." : "Type '/' for commands..."
+                          }
+                          className={`w-full bg-transparent outline-none resize-none overflow-hidden py-1 transition-all placeholder:text-zinc-200 ${
+                            block.type === "heading_2" ? "text-[18px] font-bold text-zinc-900" :
+                            block.type === "heading_3" ? "text-[15px] font-bold text-zinc-800" :
+                            block.type === "code" ? "text-[11px] font-mono text-zinc-600 bg-zinc-50 p-3 rounded-xl border border-zinc-100" :
+                            block.type === "to_do" && block.checked ? "text-[13px] text-zinc-300 line-through" :
+                            "text-[13px] text-zinc-700 leading-relaxed"
                           }`}
-                          placeholder="To-do..."
                         />
                       </div>
-                    ) : (
-                      <input
-                        data-block-input
-                        type="text"
-                        value={block.content}
-                        onChange={(e) => updateBlock(i, e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(e, i)}
-                        className={`w-full bg-transparent outline-none ${
-                          block.type === "heading_2"
-                            ? "text-sm font-bold text-zinc-900"
-                            : block.type === "heading_3"
-                            ? "text-[13px] font-semibold text-zinc-800"
-                            : block.type === "code"
-                            ? "text-[11px] font-mono text-zinc-600 bg-zinc-50 px-2 py-1 rounded-lg border border-zinc-100"
-                            : block.type === "bulleted_list_item"
-                            ? "text-[12px] text-zinc-700 before:content-['•'] before:mr-1.5 before:text-zinc-400"
-                            : block.type === "numbered_list_item"
-                            ? "text-[12px] text-zinc-700"
-                            : "text-[12px] text-zinc-700"
-                        }`}
-                        placeholder={
-                          block.type === "heading_2"
-                            ? "Heading"
-                            : block.type === "heading_3"
-                            ? "Subheading"
-                            : block.type === "code"
-                            ? "Code..."
-                            : "Type something..."
-                        }
-                      />
                     )}
                   </div>
+
+                  {/* Options trigger (only shown on hover) */}
+                  <button 
+                    onClick={() => removeBlock(i)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-zinc-300 hover:text-red-400 hover:bg-red-50 rounded-md transition-all shrink-0 mt-1"
+                    title="Delete block"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>
@@ -475,8 +501,10 @@ export function NotionPanel({ projectId }: NotionPanelProps) {
       {/* Notes list */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {loadingNotes ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="w-5 h-5 border-2 border-zinc-200 border-t-zinc-500 rounded-full animate-spin" />
+          <div className="py-1">
+            {[1, 2, 3, 4].map((i) => (
+              <CardSkeleton key={i} />
+            ))}
           </div>
         ) : notes.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">

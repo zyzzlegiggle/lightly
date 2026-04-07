@@ -35,13 +35,38 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
 
+  if (!notionToken) {
+    return Response.json({ connected: false, pageId: dbProject.notionPageId });
+  }
+
   // GET ?action=pages — list child pages under the project's Notion page
-  if (action === "pages" && dbProject.notionPageId && notionToken) {
+  if (action === "pages" && dbProject.notionPageId) {
     try {
-      const resp = await fetch(`${NOTION_API}/blocks/${dbProject.notionPageId}/children?page_size=100`, {
+      // Try to query as database first
+      const dbResp = await fetch(`${NOTION_API}/databases/${dbProject.notionPageId}/query`, {
+        method: "POST",
+        headers: NOTION_HEADERS(notionToken),
+        body: JSON.stringify({ page_size: 100 }),
+      });
+      const dbData = await dbResp.json();
+      
+      if (dbResp.ok) {
+        const pages = (dbData.results || []).map((r: any) => ({
+          id: r.id,
+          title: r.properties?.title?.title?.[0]?.plain_text || 
+                 r.properties?.Name?.title?.[0]?.plain_text || 
+                 "Untitled",
+          createdTime: r.created_time,
+          lastEditedTime: r.last_edited_time,
+        }));
+        return Response.json({ pages });
+      }
+
+      // Fallback: list child pages as blocks (for a standard Page)
+      const blocksResp = await fetch(`${NOTION_API}/blocks/${dbProject.notionPageId}/children?page_size=100`, {
         headers: NOTION_HEADERS(notionToken),
       });
-      const data = await resp.json();
+      const data = await blocksResp.json();
 
       // Filter to child_page blocks
       const pages = (data.results || [])
@@ -61,7 +86,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   // GET ?action=page&pageId=xxx — get page content (blocks)
-  if (action === "page" && notionToken) {
+  if (action === "page") {
     const pageId = searchParams.get("pageId");
     if (!pageId) return Response.json({ error: "pageId required" }, { status: 400 });
 
@@ -309,11 +334,19 @@ function extractBlockText(block: any): string {
   const type = block.type;
   const data = block[type];
   if (!data) return "";
-  if (data.rich_text) {
+  
+  // Standard text-based blocks (paragraph, headings, lists, etc)
+  if (data.rich_text && Array.isArray(data.rich_text)) {
     return data.rich_text.map((t: any) => t.plain_text || "").join("");
   }
-  if (data.text) {
+  
+  // Old style or other nested text fields
+  if (data.text && Array.isArray(data.text)) {
     return data.text.map((t: any) => t.plain_text || "").join("");
   }
+
+  // Handle specific block contents if rich_text is missing
+  if (typeof data === "string") return data;
+  
   return "";
 }

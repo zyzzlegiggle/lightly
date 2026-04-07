@@ -100,11 +100,11 @@ export function Sidebar({ session, profile, onNewProject }: { session: any; prof
       <div className={`flex items-center p-3 border-b border-border-subtle bg-sidebar-bg/50 backdrop-blur-md sticky top-0 z-10 ${isCollapsed ? "flex-col gap-4 py-4 justify-center" : "justify-between"}`}>
         {isCollapsed ? (
           <Link href="/" className="w-10 h-10 border border-border-subtle rounded-xl flex items-center justify-center shadow-sm hover:scale-110 hover:shadow-md transition-all active:scale-95">
-             <img src="/logo.png" alt="l" className="w-7 h-7 object-contain" />
+             <span className="font-serif text-lg lowercase">l</span>
           </Link>
         ) : (
           <Link href="/" className="flex items-center group/logo hover:opacity-90 transition-all px-1">
-            <img src="/logo.png" alt="Lightly" className="h-8 object-contain transform group-hover/logo:scale-105 transition-transform" />
+            <span className="font-serif text-2xl tracking-tighter lowercase">lightly</span>
           </Link>
         )}
         <button
@@ -158,7 +158,7 @@ export function Sidebar({ session, profile, onNewProject }: { session: any; prof
         {!isCollapsed && (
           <div className="flex-1">
             <div className="flex items-center justify-between px-2 mb-2">
-              <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Projects</span>
+              <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-60">projects</span>
               {onNewProject && (
                 <button onClick={onNewProject} className="p-1 rounded hover:bg-black/[0.05] text-text-muted hover:text-accent-primary transition-colors" title="New Project">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
