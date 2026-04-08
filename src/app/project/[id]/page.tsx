@@ -40,10 +40,10 @@ export default function WorkspacePage() {
 
   const phase = statusData?.phase || "BUILDING";
 
-  // ── Compute the Proxied Preview URL ──
-  // We wrap the raw Droplet IP in our Next.js Reverse Proxy for HTTPS and Host compatibility
+  // ── Compute the Direct Preview URL ──
+  // Reverted to direct IP access for localhost stability. Note: This will be blocked by browsers on HTTPS (Vercel/Ngrok).
   const iframeSrc = previewUrl 
-    ? `/api/preview/${projectId}/${currentPath.replace(/^\//, "")}`
+    ? (previewUrl.endsWith("/") ? previewUrl : `${previewUrl}/`) + currentPath.replace(/^\//, "")
     : null;
 
   // Toggle tab — clicking the active tab collapses the panel

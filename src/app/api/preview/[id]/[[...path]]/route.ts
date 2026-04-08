@@ -3,21 +3,14 @@ import { db } from "@/lib/db";
 import { project } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
-const STRIPPED_HEADERS = [
-  "x-frame-options",
-  "content-security-policy",
-  "content-security-policy-report-only",
-  "cross-origin-embedder-policy",
-  "cross-origin-opener-policy",
-  "cross-origin-resource-policy",
-];
-
-async function resolveTarget(id: string) {
+async function resolveTarget(id: string): Promise<string | null> {
   try {
     const dbProject = await db.query.project.findFirst({
       where: eq(project.id, id),
     });
-    return dbProject?.lastPreviewUrl?.replace(/\/$/, "") || null;
+    const url = dbProject?.lastPreviewUrl?.replace(/\/$/, "");
+    console.log(`[Proxy] DB lookup for ${id}: ${url || "(not found)"}`);
+    return url || null;
   } catch (err) {
     console.error("[Proxy] DB Lookup failed:", err);
     return null;
@@ -34,52 +27,47 @@ async function handleProxy(
 
   const targetBase = await resolveTarget(id);
   if (!targetBase) {
-    return new NextResponse("Project or preview URL not found", { status: 404 });
+    return new NextResponse(
+      `<html><body><h3>Preview not ready</h3><p>No preview URL found for project ${id}. The sandbox may still be starting.</p></body></html>`,
+      { status: 404, headers: { "Content-Type": "text/html" } }
+    );
   }
 
-  const targetUrl = new URL(subPath, targetBase + "/");
-  req.nextUrl.searchParams.forEach((v, k) => targetUrl.searchParams.set(k, v));
-
-  console.log(`[Proxy] ${req.method} -> ${targetUrl.toString()}`);
+  // Build target URL
+  const targetUrl = `${targetBase}/${subPath}`;
+  console.log(`[Proxy] ${req.method} -> ${targetUrl}`);
 
   try {
-    const upstreamHeaders = new Headers(req.headers);
-    
-    upstreamHeaders.set("Host", "localhost:3000");
-    
-    upstreamHeaders.delete("connection");
-    upstreamHeaders.delete("keep-alive");
-
-    const response = await fetch(targetUrl.toString(), {
+    // Fetch from the Droplet with a clean Host header
+    const response = await fetch(targetUrl, {
       method: req.method,
-      headers: upstreamHeaders,
-      body: req.method !== "GET" && req.method !== "HEAD" ? await req.blob() : undefined,
-      redirect: "manual",
+      headers: {
+        "Host": "localhost:3000",
+        "Accept": req.headers.get("accept") || "*/*",
+        "Accept-Language": req.headers.get("accept-language") || "en",
+        "User-Agent": "Lightly-Proxy/1.0",
+      },
+      redirect: "follow",
       cache: "no-store",
     });
 
-    if ([301, 302, 307, 308].includes(response.status)) {
-      const location = response.headers.get("Location");
-      if (location) {
-        const absoluteLocation = new URL(location, targetBase).toString();
-        const proxiedLocation = absoluteLocation.replace(targetBase, proxyBase);
-        return NextResponse.redirect(new URL(proxiedLocation, req.url), response.status);
-      }
-    }
+    console.log(`[Proxy] Response: ${response.status} ${response.headers.get("content-type")}`);
 
-    const contentType = response.headers.get("Content-Type") || "";
-    const downstreamHeaders = new Headers(response.headers);
+    const contentType = response.headers.get("Content-Type") || "application/octet-stream";
 
-    STRIPPED_HEADERS.forEach(h => downstreamHeaders.delete(h));
-    
-    downstreamHeaders.set("Access-Control-Allow-Origin", "*");
-    downstreamHeaders.set("X-Frame-Options", "ALLOWALL");
+    // Build CLEAN downstream headers from scratch — no forwarding of upstream encoding headers
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-cache",
+    };
 
+    // For HTML responses: read text, inject <base> tag
     if (contentType.includes("text/html")) {
       let html = await response.text();
+      console.log(`[Proxy] HTML response: ${html.length} chars`);
+
       const baseTag = `<base href="${proxyBase}">`;
-      
-      // Use regex to match <head> with any attributes (e.g. <head lang="en">)
       const headMatch = html.match(/<head([^>]*)>/i);
       if (headMatch) {
         html = html.replace(headMatch[0], `${headMatch[0]}${baseTag}`);
@@ -87,24 +75,22 @@ async function handleProxy(
         html = baseTag + html;
       }
 
-      return new NextResponse(html, {
-        status: response.status,
-        headers: downstreamHeaders,
-      });
+      return new NextResponse(html, { status: response.status, headers });
     }
 
-    return new NextResponse(response.body, {
-      status: response.status,
-      headers: downstreamHeaders,
-    });
+    // For all other responses: read the full body as bytes and return it cleanly
+    // This avoids all content-encoding/transfer-encoding double-decompression issues
+    const body = await response.arrayBuffer();
+    return new NextResponse(body, { status: response.status, headers });
 
-  } catch (err) {
-    console.error("[Proxy Error]", err);
+  } catch (err: any) {
+    console.error("[Proxy Error]", err?.message || err);
     return new NextResponse(
       `<html><body style="font-family:sans-serif;padding:2rem;color:#666">
-        <h3>Preview Link Error</h3>
+        <h3>Preview Unavailable</h3>
         <p>Could not reach the sandbox at <code>${targetBase}</code>.</p>
-        <p>Ensure your droplet is running and port 3000 is open.</p>
+        <p>Error: ${err?.message || "Connection failed"}</p>
+        <p>The droplet may still be starting up. Try refreshing.</p>
       </body></html>`,
       { status: 502, headers: { "Content-Type": "text/html" } }
     );
@@ -116,12 +102,7 @@ export const POST = handleProxy;
 export const PUT = handleProxy;
 export const DELETE = handleProxy;
 export const PATCH = handleProxy;
-export const OPTIONS = async () => new NextResponse(null, { 
-  status: 204, 
-  headers: { 
-    "Access-Control-Allow-Origin": "*", 
-    "Access-Control-Allow-Methods": "*", 
-    "Access-Control-Allow-Headers": "*",
-    "Access-Control-Max-Age": "86400"
-  } 
+export const OPTIONS = async () => new NextResponse(null, {
+  status: 204,
+  headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }
 });
