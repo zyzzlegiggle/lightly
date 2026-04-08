@@ -69,14 +69,14 @@ class LinearService:
               nodes { 
                 id title identifier url priority
                 state { id name color type }
-                assignees { nodes { id name avatarUrl } }
+                assignee { id name avatarUrl }
               }
             }
           }
         }
         """
         data = self._query(query, {"projectId": project_id})
-        return data.get("project", {}).get("issues", {}).get("nodes", [])
+        return (data.get("project") or {}).get("issues", {}).get("nodes", [])
 
     def create_issue(self, team_id: str, title: str, description: str = "", project_id: Optional[str] = None, state_id: Optional[str] = None, assignee_id: Optional[str] = None, due_date: Optional[str] = None) -> Dict:
         """Create a new issue in Linear."""
@@ -155,4 +155,4 @@ class LinearService:
         }
         """
         data = self._query(query, {"teamId": team_id})
-        return data.get("team", {}).get("members", {}).get("nodes", [])
+        return (data.get("team") or {}).get("members", {}).get("nodes", [])

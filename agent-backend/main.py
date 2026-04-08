@@ -268,13 +268,6 @@ async def linear_create(req: LinearCreateRequest):
     )
     return {"issue": issue}
 
-@app.post("/api/linear/members")
-async def linear_members(req: LinearTeamRequest):
-    from linear_service import LinearService
-    # We might need teamId in request, but LinearTeamRequest only has token.
-    # Wait, the frontend might be sending the wrong request object or I should adjust.
-    # For now, let's assume it has teamId
-    pass
 
 class LinearMemberRequest(BaseModel):
     token: str
