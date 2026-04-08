@@ -401,7 +401,10 @@ export function ChatSidebar({
               setActionSuccessUrls((p: Record<string, string>) => ({ ...p, [evt.id]: evt.url }));
               onActionSuccess?.();
             } else if (evt.type === "done") {
-              setMessages((p) => p.filter((m) => m.role !== "status"));
+              setMessages((p) => p.filter((m) => 
+                m.role !== "status" && 
+                !(m.id === assistantId && m.isSilent && !m.content && !m.changesDescription && (!m.actions || m.actions.length === 0))
+              ));
             }
           } catch {
             /* skip malformed */
@@ -491,8 +494,12 @@ export function ChatSidebar({
           </div>
         ) : (
           <div className="p-4 space-y-3">
-            {messages.map((msg) => (
-              <div key={msg.id}>
+            {messages.map((msg) => {
+              if (msg.role === "assistant" && msg.isSilent && !msg.content && !msg.changesDescription && (!msg.actions || msg.actions.length === 0)) {
+                return null;
+              }
+              return (
+                <div key={msg.id}>
                 {/* ── Status ── */}
                 {msg.role === "status" ? (
                   <div className="flex items-center gap-2 justify-center py-2">
@@ -687,8 +694,9 @@ export function ChatSidebar({
                     </div>
                   </div>
                 )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
             <div ref={bottomRef} />
           </div>
         )}

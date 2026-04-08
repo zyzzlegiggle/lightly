@@ -70,7 +70,8 @@ PLAN_PROMPT = (
     "## Semantic Intent Rules:\n"
     "1. Pick the SINGLE best service. If you need to search for something to act, use `search` or `list` first.\n"
     "2. If requested to 'Add task to In Progress', find the 'In Progress' state ID from board context and use it in `linear_create_propose`.\n"
-    "3. RICH MENTIONS: Use `[notion:Title|URL]` or `[linear:Title|URL]` when referencing items you found. Example: 'I've added the [linear:Fix Header Bug|https://linear.app/...] task.'\n\n"
+    "3. RICH MENTIONS: Use `[notion:Title|URL]` or `[linear:Title|URL]` when referencing items you found. Example: 'I've added the [linear:Fix Header Bug|https://linear.app/...] task.'\n"
+    "4. NOTION NOTES: Use CLEAN MARKDOWN (## for headings, - for bullets, **bold**) in the `content` field. DO NOT wrap the content in extra quotes, apostrophes, or code blocks (` ``` `) within the JSON string.\n\n"
     "## Generic Scoping Rules:\n"
     "1. Pick the SINGLE best tool for the user's request.\n"
     "2. CRITICAL: If a service is NOT CONNECTED, you MUST STILL output the tool call JSON. The system will then automatically show a 'Connect' button for the user. NEVER say you cannot access a service with plain text.\n"
@@ -85,7 +86,7 @@ PLAN_PROMPT = (
     '  {"gmail_send_propose": {"to": "email@example.com", "subject": "...", "body": "full email body"}}\n\n'
     "NOTION:\n"
     '  {"notion_search": {"query": "..."}}\n'
-    '  {"notion_add_note_propose": {"title": "...", "content": "note content"}}\n\n'
+    '  {"notion_add_note_propose": {"title": "...", "content": "## Section\\n- Point 1\\n- **Point 2**"}}\n\n'
     "LINEAR:\n"
     '  {"linear_search": {"query": "..."}}\n'
     '  {"linear_list_board": {}}\n'
@@ -101,6 +102,7 @@ PLAN_PROMPT = (
     '  {"slack_send_propose": {"channel": "general", "text": "..."}}\n\n'
     "GENERAL:\n"
     '  {"clarify": "your helpful response or question", "plan": ""}\n'
+
 )
 
 EDIT_PROMPT = (
