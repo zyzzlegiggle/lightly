@@ -11,6 +11,7 @@ import { CalendarPanel } from "@/components/workspace/CalendarPanel";
 import { GmailPanel } from "@/components/workspace/GmailPanel";
 import { SlackPanel } from "@/components/workspace/SlackPanel";
 import { LinearPanel } from "@/components/workspace/LinearPanel";
+import { ProfileModal } from "@/components/workspace/ProfileModal";
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -30,6 +31,7 @@ export default function WorkspacePage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [iframeStatus, setIframeStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // ── Sync active tab with URL ──
@@ -37,6 +39,10 @@ export default function WorkspacePage() {
     const tab = searchParams.get("tab") as WorkspaceTab;
     if (tab && ["chat", "logic", "gmail", "calendar", "slack", "linear", "notion", "notes"].includes(tab)) {
       setActiveTab(tab);
+    }
+    
+    if (searchParams.get("profileOpen") === "true") {
+      setIsProfileOpen(true);
     }
   }, [searchParams]);
 
@@ -56,6 +62,10 @@ export default function WorkspacePage() {
 
   // Toggle tab — clicking the active tab collapses the panel
   const handleTabChange = useCallback((tab: WorkspaceTab) => {
+    if (tab === "profile") {
+      setIsProfileOpen(true);
+      return;
+    }
     setActiveTab((prev) => (prev === tab ? null : tab));
   }, []);
 
@@ -595,6 +605,12 @@ export default function WorkspacePage() {
           100% { transform: translateX(100%); }
         }
       `}</style>
+
+      <ProfileModal 
+        projectId={projectId} 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)} 
+      />
     </div>
   );
 }

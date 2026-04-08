@@ -16,6 +16,7 @@ interface GmailMessageFull extends GmailMessage {
   to: string;
   body: string;
   labelIds: string[];
+  restricted?: boolean;
 }
 
 type View = "inbox" | "reading" | "compose";
@@ -395,6 +396,15 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
                   ? selectedMessage.body.replace(/<[^>]*>/g, "").trim()
                   : selectedMessage.snippet}
               </div>
+
+              {selectedMessage.restricted && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                  <p className="text-[10px] text-amber-700 leading-relaxed">
+                    <strong>Note:</strong> Only a preview is available because of restricted permissions. 
+                    To read full emails, please <a href="/settings" className="font-bold underline">reconnect Google</a> in Settings.
+                  </p>
+                </div>
+              )}
 
               {/* Reply button */}
               <div className="mt-6 pt-4 border-t border-zinc-100">

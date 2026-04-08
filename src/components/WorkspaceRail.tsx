@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-export type WorkspaceTab = "chat" | "gmail" | "calendar" | "notion" | "slack" | "linear";
+export type WorkspaceTab = "chat" | "gmail" | "calendar" | "notion" | "slack" | "linear" | "profile";
 
 interface WorkspaceRailProps {
   activeTab: WorkspaceTab | null;
@@ -47,6 +47,15 @@ const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    id: "profile",
+    label: "Profile",
+    icon: (
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
+  {
     id: "notion",
     label: "Notes",
     icon: (
@@ -82,8 +91,8 @@ export function WorkspaceRail({ activeTab, onTabChange }: WorkspaceRailProps) {
     return () => window.removeEventListener("highlight-tab", handler);
   }, []);
 
-  const topTabs = tabs.filter(tab => tab.id !== "gmail" && tab.id !== "calendar");
-  const bottomTabs = tabs.filter(tab => tab.id === "gmail" || tab.id === "calendar");
+  const topTabs = tabs.filter(tab => tab.id !== "gmail" && tab.id !== "calendar" && tab.id !== "profile");
+  const bottomTabs = tabs.filter(tab => tab.id === "gmail" || tab.id === "calendar" || tab.id === "profile");
 
   return (
     <div className="w-12 h-full bg-white border-r border-zinc-200 flex flex-col items-center pt-3 shrink-0">

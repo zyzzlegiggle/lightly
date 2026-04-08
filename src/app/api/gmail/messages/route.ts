@@ -51,14 +51,27 @@ export async function GET(req: Request) {
   const authHeaders = { Authorization: `Bearer ${token}` };
 
   if (messageId) {
-    const msgResp = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
+    let msgResp = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
       headers: authHeaders,
     });
+    
+    // Fallback for restricted scopes (metadata)
+    if (msgResp.status === 403) {
+      const errText = await msgResp.clone().text();
+      if (errText.includes("Metadata scope")) {
+        console.warn("[Gmail] FULL format forbidden, falling back to METADATA");
+        msgResp = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=metadata`, {
+          headers: authHeaders,
+        });
+      }
+    }
+
     if (!msgResp.ok) {
       const err = await msgResp.text();
       console.error("[Gmail] Message fetch failed:", err);
       return Response.json({ error: "Failed to fetch message" }, { status: msgResp.status });
     }
+    const isRestricted = msgResp.url.includes("format=metadata");
     const msg = await msgResp.json();
     const hdrs = parseHeaders(msg.payload?.headers ?? []);
     const body = extractBody(msg.payload);
@@ -71,6 +84,7 @@ export async function GET(req: Request) {
       snippet: msg.snippet || "",
       body,
       labelIds: msg.labelIds || [],
+      restricted: isRestricted,
     });
   }
 
