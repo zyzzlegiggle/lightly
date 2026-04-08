@@ -9,13 +9,17 @@ async function getGoogleToken(userId: string): Promise<string | null> {
 
 function parseHeaders(headers: any[]): Record<string, string> {
   const map: Record<string, string> = {};
-  for (const h of headers) map[h.name] = h.value;
+  for (const h of headers) {
+    if (h.name && h.value) {
+      map[h.name] = h.value;
+      map[h.name.toLowerCase()] = h.value;
+    }
+  }
   return map;
 }
 
 function extractBody(payload: any): string {
   if (!payload) return "";
-  // Check parts recursively for text/plain or text/html
   if (payload.parts) {
     for (const part of payload.parts) {
       const text = extractBody(part);
@@ -24,7 +28,6 @@ function extractBody(payload: any): string {
   }
   if (payload.mimeType === "text/plain" || payload.mimeType === "text/html") {
     if (payload.body?.data) {
-      // Use base64url safe decoding
       const data = payload.body.data.replace(/-/g, "+").replace(/_/g, "/");
       return Buffer.from(data, "base64").toString("utf-8");
     }
@@ -32,7 +35,6 @@ function extractBody(payload: any): string {
   return "";
 }
 
-// GET /api/gmail/messages?q=&maxResults=20
 export async function GET(req: Request) {
   const session = await auth0.getSession();
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,13 +43,13 @@ export async function GET(req: Request) {
   if (!token) return Response.json({ error: "google_not_connected" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
-  const q = searchParams.get("q") || "in:inbox";
+  // label:INBOX is often more reliable than in:inbox in some API versions
+  const q = searchParams.get("q") || "label:INBOX";
   const maxResults = parseInt(searchParams.get("maxResults") || "25");
   const messageId = searchParams.get("id");
 
   const authHeaders = { Authorization: `Bearer ${token}` };
 
-  // Single message fetch
   if (messageId) {
     const msgResp = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
       headers: authHeaders,
@@ -62,10 +64,10 @@ export async function GET(req: Request) {
     const body = extractBody(msg.payload);
     return Response.json({
       id: msg.id,
-      subject: hdrs["Subject"] || "(no subject)",
-      from: hdrs["From"] || "",
-      to: hdrs["To"] || "",
-      date: hdrs["Date"] || "",
+      subject: hdrs["subject"] || "(no subject)",
+      from: hdrs["from"] || "",
+      to: hdrs["to"] || "",
+      date: hdrs["date"] || "",
       snippet: msg.snippet || "",
       body,
       labelIds: msg.labelIds || [],
@@ -73,38 +75,50 @@ export async function GET(req: Request) {
   }
 
   // List messages
+  console.log("[Gmail] Listing with query:", q);
   const listResp = await fetch(
     `${GMAIL_BASE}/messages?${new URLSearchParams({ q, maxResults: String(maxResults) })}`,
     { headers: authHeaders }
   );
+  
   if (!listResp.ok) {
     const err = await listResp.text();
-    console.error("[Gmail] List failed:", err);
+    console.error("[Gmail] List failed:", listResp.status, err);
     return Response.json({ error: "Failed to list messages" }, { status: listResp.status });
   }
 
   const listData = await listResp.json();
   const messageIds: string[] = (listData.messages || []).map((m: any) => m.id);
+  console.log("[Gmail] Found message IDs:", messageIds.length);
 
   // Fetch each message in parallel (metadata only for list view)
   const messages = await Promise.all(
     messageIds.map(async (id) => {
-      const r = await fetch(`${GMAIL_BASE}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`, {
-        headers: authHeaders,
+      // Use format=metadata to get headers plus snippet/labels
+      const query = new URLSearchParams({
+        format: "metadata",
+        metadataHeaders: ["Subject", "From", "Date"] as any
       });
+      // URLSearchParams repeated keys work like this:
+      const fullUrl = `${GMAIL_BASE}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`;
+      
+      const r = await fetch(fullUrl, { headers: authHeaders });
       if (!r.ok) return null;
       const m = await r.json();
       const hdrs = parseHeaders(m.payload?.headers ?? []);
       return {
         id: m.id,
-        subject: hdrs["Subject"] || "(no subject)",
-        from: hdrs["From"] || "",
-        date: hdrs["Date"] || "",
+        subject: hdrs["subject"] || "(no subject)",
+        from: hdrs["from"] || "",
+        date: hdrs["date"] || "",
         snippet: m.snippet || "",
         unread: m.labelIds?.includes("UNREAD") ?? false,
       };
     })
   );
 
-  return Response.json({ messages: messages.filter(Boolean) });
+  const finalMessages = messages.filter(Boolean);
+  console.log("[Gmail] Final returning messages:", finalMessages.length);
+  return Response.json({ messages: finalMessages });
 }
+

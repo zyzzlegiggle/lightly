@@ -77,6 +77,7 @@ export function GmailPanel({ refreshKey }: GmailPanelProps) {
   const [view, setView] = useState<View>("inbox");
   const [messages, setMessages] = useState<GmailMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<GmailMessageFull | null>(null);
   const [loadingMessage, setLoadingMessage] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -100,13 +101,19 @@ export function GmailPanel({ refreshKey }: GmailPanelProps) {
   // Load messages when connected
   const loadMessages = useCallback(async (q?: string) => {
     setLoadingMessages(true);
+    setLoadError(null);
     try {
-      const query = q !== undefined ? q : activeSearch || "in:inbox";
-      const res = await fetch(`/api/gmail/messages?q=${encodeURIComponent(query || "in:inbox")}&maxResults=25`);
-      if (!res.ok) throw new Error();
+      const query = q !== undefined ? q : activeSearch || "label:INBOX";
+      const res = await fetch(`/api/gmail/messages?q=${encodeURIComponent(query)}&maxResults=25`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error ${res.status}`);
+      }
       const data = await res.json();
       setMessages(data.messages || []);
-    } catch {
+    } catch (err: any) {
+      console.error("[Gmail] Failed to load messages:", err);
+      setLoadError(err.message || "Failed to load messages");
       setMessages([]);
     } finally {
       setLoadingMessages(false);
@@ -120,7 +127,7 @@ export function GmailPanel({ refreshKey }: GmailPanelProps) {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setActiveSearch(searchQuery);
-    loadMessages(searchQuery || "in:inbox");
+    loadMessages(searchQuery || "label:INBOX");
   };
 
   const openMessage = async (id: string) => {
@@ -263,6 +270,26 @@ export function GmailPanel({ refreshKey }: GmailPanelProps) {
               {[1, 2, 3, 4, 5].map((i) => (
                 <CardSkeleton key={i} />
               ))}
+            </div>
+          ) : loadError ? (
+            <div className="flex flex-col items-center justify-center h-full py-16 text-center px-8">
+              <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-6 border border-red-100">
+                <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-[14px] font-bold text-zinc-800 mb-1">Mail Error</h3>
+              <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
+                {loadError === "google_not_connected" 
+                  ? "Your Google account session has expired. Please reconnect." 
+                  : `Failed to load messages: ${loadError}`}
+              </p>
+              <button
+                onClick={() => loadMessages()}
+                className="inline-flex items-center gap-2 bg-zinc-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all shadow-md active:scale-95"
+              >
+                Retry
+              </button>
             </div>
           ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center px-8">
