@@ -50,6 +50,12 @@ export async function GET(req: Request) {
 
   const authHeaders = { Authorization: `Bearer ${token}` };
 
+  // Debug: Log scopes
+  fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${token}`)
+    .then(r => r.json())
+    .then(d => console.log(`[Gmail Debug] Scopes: ${d.scope}`))
+    .catch(() => {});
+
   if (messageId) {
     let msgResp = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
       headers: authHeaders,

@@ -109,50 +109,48 @@ export function ProfileModal({ projectId, isOpen, onClose }: ProfileModalProps) 
   const returnTo = encodeURIComponent(`/project/${projectId}?tab=chat&profileOpen=true`);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-[100]">
+      {/* Backdrop for click-outside closing */}
       <div 
-        className="absolute inset-0 bg-zinc-950/40 backdrop-blur-sm animate-in fade-in duration-300"
+        className="absolute inset-0 bg-transparent"
         onClick={onClose}
       />
       
-      {/* Modal Content */}
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-        <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-zinc-900 uppercase tracking-widest">Account Profile</h2>
+      {/* Popover Content - Positioned near the bottom-left sidebar icon */}
+      <div className="absolute left-14 bottom-8 w-[280px] bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.15)] border border-zinc-200 overflow-hidden animate-in fade-in slide-in-from-left-2 duration-200">
+        <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
+            <h2 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Account</h2>
             <button 
                 onClick={onClose}
-                className="p-2 hover:bg-zinc-200 rounded-xl transition-colors text-zinc-400 hover:text-zinc-600"
+                className="p-1 hover:bg-zinc-200 rounded-lg transition-colors text-zinc-400"
             >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
 
-        <div className="overflow-y-auto max-h-[70vh] p-6">
+        <div className="p-4">
             {loading ? (
-                <div className="py-12 flex flex-col items-center justify-center">
-                    <div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin mb-4" />
-                    <p className="text-xs text-zinc-400 font-medium">Loading details...</p>
+                <div className="py-4 flex flex-col items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin mb-2" />
                 </div>
             ) : (
-                <div className="space-y-8">
+                <div className="space-y-6">
                     {/* User Info */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                         {profile?.image ? (
-                            <img src={profile.image} alt="" className="w-16 h-16 rounded-2xl shadow-sm border-2 border-white" />
+                            <img src={profile.image} alt="" className="w-10 h-10 rounded-xl shadow-sm border border-zinc-100" />
                         ) : (
-                            <div className="w-16 h-16 rounded-2xl bg-zinc-200 flex items-center justify-center text-2xl font-bold text-zinc-500 border-2 border-white shadow-sm">
+                            <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-bold text-zinc-400 border border-zinc-100">
                                 {profile?.name?.[0]}
                             </div>
                         )}
                         <div className="min-w-0">
-                            <h3 className="text-base font-bold text-zinc-900 truncate">{profile?.name}</h3>
-                            <p className="text-sm text-zinc-500 truncate">{profile?.email}</p>
+                            <h3 className="text-xs font-bold text-zinc-900 truncate">{profile?.name}</h3>
                             <button 
                                 onClick={handleSignOut}
-                                className="text-[11px] font-bold text-red-500 hover:text-red-700 mt-1 transition-colors uppercase tracking-wider underline underline-offset-4"
+                                className="text-[10px] font-bold text-zinc-400 hover:text-red-500 transition-colors uppercase tracking-wider"
                             >
                                 Sign Out
                             </button>
@@ -160,13 +158,12 @@ export function ProfileModal({ projectId, isOpen, onClose }: ProfileModalProps) 
                     </div>
 
                     {/* Services Section */}
-                    <div className="space-y-4">
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Linked Services</h3>
+                    <div className="space-y-3">
+                        <h3 className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Services</h3>
                         
-                        <div className="grid grid-cols-1 gap-3">
+                        <div className="space-y-2">
                             <ServiceRow 
-                                name="Google & Gmail"
-                                icon={<GoogleIcon />}
+                                name="Google"
                                 connected={connectedProviders.includes("google-oauth2")}
                                 onConnect={`/api/auth/connect?connection=google-oauth2&returnTo=${returnTo}`}
                                 onDisconnect={() => handleDisconnect("google")}
@@ -174,8 +171,15 @@ export function ProfileModal({ projectId, isOpen, onClose }: ProfileModalProps) 
                             />
 
                             <ServiceRow 
+                                name="Slack"
+                                connected={slackWorkspaces.length > 0}
+                                onConnect={`/api/auth/slack?returnTo=${returnTo}`}
+                                onDisconnect={() => handleDisconnect("slack", slackWorkspaces[0]?.id)}
+                                isDisconnecting={disconnecting !== null && disconnecting !== "google" && disconnecting !== "linear" && disconnecting !== "notion"}
+                            />
+
+                            <ServiceRow 
                                 name="Linear"
-                                icon={<LinearIcon />}
                                 connected={connectedProviders.includes("linear")}
                                 onConnect={`/api/auth/linear?returnTo=${returnTo}`}
                                 onDisconnect={() => handleDisconnect("linear")}
@@ -184,54 +188,15 @@ export function ProfileModal({ projectId, isOpen, onClose }: ProfileModalProps) 
 
                             <ServiceRow 
                                 name="Notion"
-                                icon={<NotionIcon />}
                                 connected={connectedProviders.includes("notion")}
                                 onConnect={`/api/auth/notion?returnTo=${returnTo}`}
                                 onDisconnect={() => handleDisconnect("notion")}
                                 isDisconnecting={disconnecting === "notion"}
                             />
-
-                            {slackWorkspaces.map(ws => (
-                                <ServiceRow 
-                                    key={ws.id}
-                                    name={ws.teamName}
-                                    icon={<SlackIcon />}
-                                    connected={true}
-                                    onDisconnect={() => handleDisconnect("slack", ws.id)}
-                                    isDisconnecting={disconnecting === ws.id}
-                                    subtitle="Slack"
-                                />
-                            ))}
-                            
-                            {!slackWorkspaces.length && (
-                                <a
-                                    href={`/api/auth/slack?returnTo=${returnTo}`}
-                                    className="flex items-center justify-between p-4 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 border-dashed rounded-2xl transition-all group"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-zinc-400 group-hover:text-zinc-600 border border-zinc-100 transition-colors">
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                            </svg>
-                                        </div>
-                                        <span className="text-[11px] font-bold text-zinc-400 group-hover:text-zinc-600 transition-colors uppercase tracking-wider">Connect Slack</span>
-                                    </div>
-                                    <svg className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-                                </a>
-                            )}
                         </div>
                     </div>
                 </div>
             )}
-        </div>
-        
-        <div className="p-6 bg-zinc-50 border-t border-zinc-100 flex justify-end">
-            <button 
-                onClick={onClose}
-                className="px-6 py-2.5 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all uppercase tracking-wider"
-            >
-                Done
-            </button>
         </div>
       </div>
     </div>
@@ -240,50 +205,39 @@ export function ProfileModal({ projectId, isOpen, onClose }: ProfileModalProps) 
 
 function ServiceRow({ 
   name, 
-  icon, 
   connected, 
   onConnect, 
   onDisconnect, 
-  isDisconnecting,
-  subtitle
+  isDisconnecting 
 }: { 
   name: string; 
-  icon: React.ReactNode; 
   connected: boolean; 
   onConnect?: string; 
   onDisconnect: () => void; 
   isDisconnecting: boolean;
-  subtitle?: string;
 }) {
   return (
-    <div className={`p-4 rounded-2xl border transition-all ${connected ? 'bg-white border-zinc-200' : 'bg-zinc-50/50 border-zinc-100'}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-zinc-100 bg-white">
-            {icon}
-          </div>
-          <div className="min-w-0">
-            <h4 className={`text-xs font-bold truncate ${connected ? 'text-zinc-800' : 'text-zinc-400'}`}>{name}</h4>
-            <p className="text-[10px] text-zinc-400 truncate font-medium uppercase tracking-tight">{subtitle || (connected ? 'Connected' : 'Not linked')}</p>
-          </div>
-        </div>
-        {connected ? (
-          <button
-            onClick={onDisconnect}
-            disabled={isDisconnecting}
-            className="px-3 py-1.5 text-[10px] font-bold text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-30 uppercase tracking-tight border border-zinc-100"
-          >
-            {isDisconnecting ? "..." : "Sign Out"}
-          </button>
-        ) : (
-          <a
-            href={onConnect}
-            className="text-[10px] font-bold text-zinc-600 hover:text-zinc-900 bg-white px-3 py-1.5 rounded-lg border border-zinc-200 shadow-sm transition-all uppercase tracking-wider"
-          >
-            Connect
-          </a>
-        )}
+    <div className="flex items-center justify-between group">
+      <div className="flex items-center gap-2">
+        <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-zinc-200'}`} />
+        <span className={`text-[11px] font-medium ${connected ? 'text-zinc-700' : 'text-zinc-400'}`}>{name}</span>
       </div>
+      {connected ? (
+        <button
+          onClick={onDisconnect}
+          disabled={isDisconnecting}
+          className="text-[9px] font-bold text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all uppercase tracking-tight"
+        >
+          {isDisconnecting ? "..." : "Sign Out"}
+        </button>
+      ) : (
+        <a
+          href={onConnect}
+          className="text-[9px] font-bold text-zinc-400 hover:text-zinc-900 transition-all uppercase tracking-wider"
+        >
+          Link
+        </a>
+      )}
     </div>
   );
 }

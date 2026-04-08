@@ -110,6 +110,13 @@ export async function GET(req: Request) {
   const refreshToken = tokens.refresh_token || null;
   const idToken = tokens.id_token || null;
 
+  console.log(`[Connect Callback] Tokens received for ${connection}:`, {
+    hasAccessToken: !!tokens.access_token,
+    hasRefreshToken: !!refreshToken,
+    hasIdToken: !!idToken,
+    expiresIn: tokens.expires_in
+  });
+
   // ── Step 2: Decode id_token to get the secondary user's sub ───────────────
   let secondarySub: string | null = null;
   if (idToken) {

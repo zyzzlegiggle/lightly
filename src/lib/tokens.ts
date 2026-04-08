@@ -64,8 +64,15 @@ export async function getServiceToken(userId: string, providerId: string): Promi
         .catch(err => console.error("[Tokens] DB update failed:", err));
 
       return freshToken;
-    } catch (e) {
-      console.warn(`[Tokens] Token Vault refresh failed for ${providerId}:`, e);
+    } catch (e: any) {
+      console.warn(`[Tokens] Token Vault refresh failed for ${providerId}:`, e.message);
+      if (e.message.includes("401")) {
+        console.error(`[Tokens] 401 detected — clearing invalid refresh token for ${providerId}`);
+        db.update(account)
+          .set({ refreshToken: null })
+          .where(eq(account.id, row.id))
+          .catch(() => {});
+      }
     }
   }
 

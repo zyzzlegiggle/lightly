@@ -60,20 +60,23 @@ export async function GET(req: Request) {
   } else if (connection === "google-oauth2") {
     // Force consent screen to ensure the user approves the elevated Gmail/Calendar scopes
     params.append("prompt", "consent");
-    // For Google/Gmail/Calendar/Tasks
-      params.append("connection_scope", [
+    // For Google/Gmail/Calendar/Tasks — Google/Auth0 usually prefer space-separated scopes
+    const googleScopes = [
       "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/calendar.events",
-      "https://www.googleapis.com/auth/tasks.readonly"
-    ].join(" "));
+      "https://www.googleapis.com/auth/tasks"
+    ].join(" ");
+    params.set("connection_scope", googleScopes);
   } else if (connection === "linear") {
     // For Linear API access
     params.append("connection_scope", "read,write");
   }
 
+  const authorizeUrl = `https://${domain}/authorize?${params.toString()}`;
   console.log(`[Connect] Initiating ${connection} connection for user ${session.user.sub}`);
-  console.log(`[Connect] Callback URL: ${callbackUrl}`);
-  console.log(`[Connect] Full authorize URL: https://${domain}/authorize?${params}`);
+  console.log(`[Connect] Scopes: ${params.get("connection_scope")}`);
+  console.log(`[Connect] Full authorize URL: ${authorizeUrl}`);
 
-  return Response.redirect(`https://${domain}/authorize?${params}`);
+  return Response.redirect(authorizeUrl);
 }
