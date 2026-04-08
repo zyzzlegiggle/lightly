@@ -32,6 +32,14 @@ export default function WorkspacePage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // ── Sync active tab with URL ──
+  useEffect(() => {
+    const tab = searchParams.get("tab") as WorkspaceTab;
+    if (tab && ["chat", "logic", "gmail", "calendar", "slack", "linear", "notion", "notes"].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   // ── Pending changes state ──
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -401,15 +409,16 @@ export default function WorkspacePage() {
             onActionSuccess={handleActionSuccess}
             onTabChange={handleTabChange}
             currentPage={currentPath}
+            activeTab={activeTab || "chat"}
           />
         </div>
         
         <div className={activeTab === "gmail" ? "block" : "hidden"}>
-          <GmailPanel refreshKey={refreshKey} />
+          <GmailPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
         
         <div className={activeTab === "calendar" ? "block" : "hidden"}>
-          <CalendarPanel refreshKey={refreshKey} />
+          <CalendarPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
 
         <div className={activeTab === "slack" ? "block" : "hidden"}>

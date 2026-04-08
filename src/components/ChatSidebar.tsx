@@ -42,6 +42,7 @@ interface ChatSidebarProps {
   onActionSuccess?: () => void;
   onTabChange?: (tab: any) => void;
   currentPage?: string;
+  activeTab?: string;
 }
 
 // ── localStorage helpers ───────────────────────────────────────────────
@@ -165,7 +166,8 @@ export function ChatSidebar({
   onChangesProposed,
   onActionSuccess,
   onTabChange,
-  currentPage = "/"
+  currentPage = "/",
+  activeTab
 }: ChatSidebarProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -587,7 +589,16 @@ export function ChatSidebar({
                                             e.preventDefault();
                                             onTabChange(action.tab);
                                           } else if (action.url) {
-                                            window.open(action.url, "_blank");
+                                            let finalUrl = action.url;
+                                            if (finalUrl.startsWith("/api/auth/")) {
+                                              const url = new URL(finalUrl, window.location.origin);
+                                              if (!url.searchParams.has("returnTo")) {
+                                                const returnPath = activeTab ? `/project/${projectId}?tab=${activeTab}` : `/project/${projectId}`;
+                                                url.searchParams.set("returnTo", returnPath);
+                                                finalUrl = url.pathname + url.search;
+                                              }
+                                            }
+                                            window.open(finalUrl, "_blank");
                                           }
                                         }}
                                         className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all shadow-sm group text-left text-[11px] font-bold border ${successUrl

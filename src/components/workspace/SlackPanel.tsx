@@ -370,7 +370,7 @@ export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
         <p className="text-sm font-semibold text-zinc-800 mb-1">Messages</p>
         <p className="text-xs text-zinc-400 mb-5">Connect Slack to chat with your team.</p>
         <a
-          href="/api/auth/slack"
+          href={`/api/auth/slack?returnTo=${encodeURIComponent(`/project/${projectId}?tab=slack`)}`}
           className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-white text-sm py-2.5 rounded-xl hover:bg-zinc-700 transition-colors"
         >
           Connect Slack

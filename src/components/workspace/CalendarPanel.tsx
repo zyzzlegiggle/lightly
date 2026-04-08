@@ -64,7 +64,7 @@ function LoadingSpinner() {
   );
 }
 
-function NotConnected() {
+function NotConnected({ projectId }: { projectId: string }) {
   return (
     <div className="w-[360px] h-full bg-white border-r border-zinc-200 flex flex-col items-center justify-center shrink-0 px-8 text-center pb-16">
       <div className="w-12 h-12 rounded-2xl bg-zinc-50 border border-zinc-200 flex items-center justify-center mb-4">
@@ -75,7 +75,7 @@ function NotConnected() {
       <p className="text-sm font-semibold text-zinc-800 mb-1">Google Calendar</p>
       <p className="text-xs text-zinc-400 mb-5 leading-relaxed">Connect your Google account to sync and manage your calendar.</p>
       <a
-        href={`/api/auth/connect?connection=google-oauth2&returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`}
+        href={`/api/auth/connect?connection=google-oauth2&returnTo=${encodeURIComponent(`/project/${projectId}?tab=calendar`)}`}
         className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-zinc-700 transition-colors"
       >
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
@@ -91,10 +91,11 @@ function NotConnected() {
 }
 
 interface CalendarPanelProps {
+  projectId: string;
   refreshKey?: number;
 }
 
-export function CalendarPanel({ refreshKey }: CalendarPanelProps) {
+export function CalendarPanel({ projectId, refreshKey }: CalendarPanelProps) {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [events, setEvents] = useState<CalEvent[]>([]);
@@ -234,7 +235,7 @@ export function CalendarPanel({ refreshKey }: CalendarPanelProps) {
     date.getFullYear() === selectedDay.getFullYear();
 
   if (googleConnected === null) return <LoadingSpinner />;
-  if (googleConnected === false) return <NotConnected />;
+  if (googleConnected === false) return <NotConnected projectId={projectId} />;
 
   return (
     <div className="w-[360px] h-full bg-white border-r border-zinc-200 flex flex-col shrink-0">

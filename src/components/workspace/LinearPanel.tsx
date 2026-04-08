@@ -297,7 +297,7 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
           
           <div className="space-y-3">
             <a
-              href={`/api/auth/linear?returnTo=/project/${projectId}`}
+              href={`/api/auth/linear?returnTo=${encodeURIComponent(`/project/${projectId}?tab=linear`)}`}
               className="w-full inline-flex items-center justify-center gap-2 bg-zinc-950 text-white rounded-xl px-4 py-3 text-sm font-bold hover:bg-zinc-800 transition-all shadow-md active:scale-95"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

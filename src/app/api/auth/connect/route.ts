@@ -58,6 +58,8 @@ export async function GET(req: Request) {
   if (connection === "github") {
     params.append("connection_scope", "repo,user,read:org");
   } else if (connection === "google-oauth2") {
+    // Force consent screen to ensure the user approves the elevated Gmail/Calendar scopes
+    params.append("prompt", "consent");
     // For Google/Gmail/Calendar/Tasks
       params.append("connection_scope", [
       "https://www.googleapis.com/auth/gmail.modify",

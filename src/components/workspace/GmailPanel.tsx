@@ -42,7 +42,7 @@ function parseSender(from: string) {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 
-function NotConnected() {
+function NotConnected({ projectId }: { projectId: string }) {
   return (
     <div className="w-[360px] h-full bg-white border-r border-zinc-200 flex flex-col items-center justify-center shrink-0 px-8 text-center pb-16">
       <div className="w-12 h-12 rounded-2xl bg-zinc-50 border border-zinc-200 flex items-center justify-center mb-4">
@@ -53,7 +53,7 @@ function NotConnected() {
       <p className="text-sm font-semibold text-zinc-800 mb-1">Gmail</p>
       <p className="text-xs text-zinc-400 mb-5 leading-relaxed">Connect your Google account to read and send emails.</p>
       <a
-        href={`/api/auth/connect?connection=google-oauth2&returnTo=${encodeURIComponent(window.location.pathname)}`}
+        href={`/api/auth/connect?connection=google-oauth2&returnTo=${encodeURIComponent(`/project/${projectId}?tab=gmail`)}`}
         className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-zinc-700 transition-colors"
       >
         <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -69,10 +69,11 @@ function NotConnected() {
 }
 
 interface GmailPanelProps {
+  projectId: string;
   refreshKey?: number;
 }
 
-export function GmailPanel({ refreshKey }: GmailPanelProps) {
+export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("inbox");
   const [messages, setMessages] = useState<GmailMessage[]>([]);
@@ -181,7 +182,7 @@ export function GmailPanel({ refreshKey }: GmailPanelProps) {
   }
 
   // ── Render: not connected ──
-  if (!connected) return <NotConnected />;
+  if (!connected) return <NotConnected projectId={projectId} />;
 
   // ── Shared header ──
   const header = (

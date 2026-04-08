@@ -76,8 +76,17 @@ export async function GET(req: Request) {
 
   // List messages
   console.log("[Gmail] Listing with query:", q);
+  const params: Record<string, string> = { maxResults: String(maxResults) };
+  
+  // Use labelIds for the default inbox view to support restricted scopes (like gmail.metadata)
+  if (q === "label:INBOX") {
+    params.labelIds = "INBOX";
+  } else {
+    params.q = q;
+  }
+
   const listResp = await fetch(
-    `${GMAIL_BASE}/messages?${new URLSearchParams({ q, maxResults: String(maxResults) })}`,
+    `${GMAIL_BASE}/messages?${new URLSearchParams(params)}`,
     { headers: authHeaders }
   );
   
