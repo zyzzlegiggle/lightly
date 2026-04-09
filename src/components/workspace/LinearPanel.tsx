@@ -105,7 +105,15 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
         setIssues(data.issues || []);
         if (data.members) setMembers(data.members);
         setStatus("ready");
-        if (targetId) setView("board");
+        if (targetId) {
+          setView("board");
+          // Sync active Linear project to DB context
+          fetch(`/api/projects/${projectId}/update-context`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ linearProjectId: targetId })
+          }).catch(err => console.error("Failed to sync linear project context:", err));
+        }
       }
     } catch (err) {
       console.error(err);

@@ -242,11 +242,19 @@ export function SlackPanel({ projectId, refreshKey }: SlackPanelProps) {
   useEffect(() => {
     if (activeChannel) {
       loadMessages(activeChannel.id);
+      
+      // Update the active channel in the project context so the agent knows which one to use
+      fetch(`/api/projects/${projectId}/update-context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slackChannelId: activeChannel.id })
+      }).catch(err => console.error("Failed to sync slack channel context:", err));
+
       // Poll for new messages every 8 seconds
       const interval = setInterval(() => loadMessages(activeChannel.id), 8000);
       return () => clearInterval(interval);
     }
-  }, [activeChannel, loadMessages]);
+  }, [activeChannel, loadMessages, projectId]);
 
   // Auto-scroll to bottom
   useEffect(() => {

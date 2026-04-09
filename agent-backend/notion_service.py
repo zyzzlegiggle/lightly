@@ -34,9 +34,8 @@ class NotionService:
 
     def _parse_rich_text(self, text: str) -> List[Dict]:
         """Convert basic markdown (bold, italic, code) to Notion rich text."""
-        # Regex for bold, italic, code, and links
-        # Patterns: ***bolditalic***, **bold**, *italic*, `code`, [text](url)
-        pattern = r"(\*\*\*.*?\*\*\*|\*\*.*?\*\*|__.*?__|[\*_].*?[\*_]|`.*?`|\[.*?\]\(.*?\))"
+        # Regex for bold-italic (***), bold (**) or (__), italic (*) or (_), code (`), links [text](url)
+        pattern = r"(\*\*\*.*?\*\*\*|\*\*.*?\*\*|__.*?__|\*.*?\*|_.*?_|`.*?`|\[.*?\]\(.*?\))"
         parts = re.split(pattern, text)
         
         rich_text = []
@@ -44,17 +43,17 @@ class NotionService:
             if not part:
                 continue
             
-            # Bold + Italic (*** or ___)
-            if part.startswith("***") and part.endswith("***"):
+            # Bold + Italic (***)
+            if part.startswith("***") and part.endswith("***") and len(part) > 6:
                 rich_text.append({"type": "text", "text": {"content": part[3:-3]}, "annotations": {"bold": True, "italic": True}})
             # Bold (** or __)
-            elif (part.startswith("**") and part.endswith("**")) or (part.startswith("__") and part.endswith("__")):
+            elif ((part.startswith("**") and part.endswith("**")) or (part.startswith("__") and part.endswith("__"))) and len(part) > 4:
                 rich_text.append({"type": "text", "text": {"content": part[2:-2]}, "annotations": {"bold": True}})
             # Italic (* or _)
-            elif (part.startswith("*") and part.endswith("*")) or (part.startswith("_") and part.endswith("_")):
+            elif ((part.startswith("*") and part.endswith("*")) or (part.startswith("_") and part.endswith("_"))) and len(part) > 2:
                 rich_text.append({"type": "text", "text": {"content": part[1:-1]}, "annotations": {"italic": True}})
             # Code (`)
-            elif part.startswith("`") and part.endswith("`"):
+            elif part.startswith("`") and part.endswith("`") and len(part) > 2:
                 rich_text.append({"type": "text", "text": {"content": part[1:-1]}, "annotations": {"code": True}})
             # Link [text](url)
             elif part.startswith("[") and "](" in part and part.endswith(")"):

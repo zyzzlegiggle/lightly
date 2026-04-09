@@ -357,22 +357,24 @@ function extractBlockText(block: any): string {
   return "";
 }
 
-/** Simple parser to convert markdown markers to Notion rich_text objects */
 function parseRichText(text: string) {
   if (!text) return [{ text: { content: "" } }];
   
-  // Pattern to match **bold**, _italic_, or `code`
-  const regex = /(\*\*.*?\*\*|_.*?_|`.*?`)/g;
+  // Pattern to match ***bold-italic***, **bold**, __bold__, *italic*, _italic_, or `code`
+  const regex = /(\*\*\*.*?\*\*\*|\*\*.*?\*\*|__.*?__|\*.*?\*|_.*?_|`.*?`)/g;
   const parts = text.split(regex);
   
   const result = parts.map(part => {
-    if (part.startsWith("**") && part.endsWith("**")) {
+    if (part.startsWith("***") && part.endsWith("***") && part.length > 6) {
+      return { text: { content: part.slice(3, -3) }, annotations: { bold: true, italic: true } };
+    }
+    if (((part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"))) && part.length > 4) {
       return { text: { content: part.slice(2, -2) }, annotations: { bold: true } };
     }
-    if (part.startsWith("_") && part.endsWith("_")) {
+    if (((part.startsWith("*") && part.endsWith("*")) || (part.startsWith("_") && part.endsWith("_"))) && part.length > 2) {
       return { text: { content: part.slice(1, -1) }, annotations: { italic: true } };
     }
-    if (part.startsWith("`") && part.endsWith("`")) {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       return { text: { content: part.slice(1, -1) }, annotations: { code: true } };
     }
     return { text: { content: part } };

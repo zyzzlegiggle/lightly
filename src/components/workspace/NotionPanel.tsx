@@ -365,7 +365,7 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
               ))}
             </div>
           ) : (
-            <div className="p-5 space-y-4 max-w-full">
+            <div className="p-5 space-y-1 max-w-full">
               {editorBlocks.map((block, i) => (
                 <div key={i} data-block-item className="group relative flex items-start gap-3 pl-2">
                   {/* Left gutter (drag/type indicator) */}
@@ -404,6 +404,12 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
                           data-block-input
                           rows={1}
                           value={block.content}
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = el.scrollHeight + "px";
+                            }
+                          }}
                           onChange={(e) => {
                             updateBlock(i, e.target.value);
                             e.target.style.height = "auto";
@@ -430,10 +436,10 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
                           placeholder={
                             block.type.startsWith("heading") ? "Heading..." : "Type '/' for commands..."
                           }
-                          className={`w-full bg-transparent outline-none resize-none overflow-hidden py-1 transition-all placeholder:text-zinc-200 ${
-                            block.type === "heading_2" ? "text-[18px] font-bold text-zinc-900" :
-                            block.type === "heading_3" ? "text-[15px] font-bold text-zinc-800" :
-                            block.type === "code" ? "text-[11px] font-mono text-zinc-600 bg-zinc-50 p-3 rounded-xl border border-zinc-100" :
+                          className={`w-full bg-transparent outline-none resize-none overflow-hidden py-0.5 transition-all placeholder:text-zinc-200 block ${
+                            block.type === "heading_2" ? "text-[18px] font-bold text-zinc-900 mt-2 mb-1" :
+                            block.type === "heading_3" ? "text-[15px] font-bold text-zinc-800 mt-1.5 mb-0.5" :
+                            block.type === "code" ? "text-[11px] font-mono text-zinc-600 bg-zinc-50 p-3 rounded-xl border border-zinc-100 my-1" :
                             block.type === "to_do" && block.checked ? "text-[13px] text-zinc-300 line-through" :
                             "text-[13px] text-zinc-700 leading-relaxed"
                           }`}
