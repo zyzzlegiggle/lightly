@@ -49,11 +49,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Resolve the best available liveUrl: prefer backend response, fallback to DB
     const backendLiveUrl = statusData.liveUrl || dbProject.lastPreviewUrl || null;
     
-    // If a preview domain is configured, use HTTPS subdomain URLs instead of raw IPs
-    // Our Caddy gateway handles on-demand SSL for these subdomains automatically.
-    const previewDomain = process.env.NEXT_PUBLIC_PREVIEW_DOMAIN;
-    const resolvedLiveUrl = (previewDomain && dbProject.doAppId)
-      ? `https://${dbProject.doAppId}.${previewDomain}`
+    // Final Proxy Logic: Always use the id.preview.lightly.ink format
+    // This matches our Caddy Gateway Droplet setup
+    const resolvedLiveUrl = dbProject.doAppId 
+      ? `https://${dbProject.doAppId}.preview.lightly.ink`
       : backendLiveUrl;
     
     // Persist liveUrl and dropletIp to DB when they become available
