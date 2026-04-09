@@ -83,10 +83,12 @@ export default function WorkspacePage() {
         if (data.liveUrl) {
           setPreviewUrl(data.liveUrl);
         }
-        if (!firstFetchDone) {
+
+        // Only hide the initializing overlay once the project is truly ACTIVE
+        // This ensures the Cloudflare link is ready and the sandbox is up.
+        if (data.phase === "ACTIVE" && !firstFetchDone) {
           firstFetchDone = true;
-          // Small delay for smooth transition
-          setTimeout(() => setIsInitializing(false), 800);
+          setTimeout(() => setIsInitializing(false), 1000);
         }
         const interval = data.phase === "ACTIVE" ? 30000 : 4000;
         if (active) setTimeout(poll, interval);

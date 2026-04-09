@@ -50,12 +50,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const backendLiveUrl = statusData.liveUrl || dbProject.lastPreviewUrl || null;
     
     // If a preview domain is configured, use HTTPS subdomain URLs instead of raw IPs
-    // This resolves the mixed-content issue (HTTPS page embedding HTTP iframe)
-    // We use a hyphenated format (e.g., id-preview.lightly.ink) to keep it 
-    // at one subdomain level so Cloudflare Free SSL covers it.
+    // Our Caddy gateway handles on-demand SSL for these subdomains automatically.
     const previewDomain = process.env.NEXT_PUBLIC_PREVIEW_DOMAIN;
     const resolvedLiveUrl = (previewDomain && dbProject.doAppId)
-      ? `https://${dbProject.doAppId}-preview.${previewDomain}`
+      ? `https://${dbProject.doAppId}.${previewDomain}`
       : backendLiveUrl;
     
     // Persist liveUrl and dropletIp to DB when they become available
