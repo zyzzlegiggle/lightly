@@ -156,3 +156,25 @@ class LinearService:
         """
         data = self._query(query, {"teamId": team_id})
         return (data.get("team") or {}).get("members", {}).get("nodes", [])
+
+    def delete_project(self, project_id: str) -> bool:
+        """Delete a project in Linear."""
+        mutation = """
+        mutation ProjectArchive($id: String!) {
+          projectArchive(id: $id) {
+            success
+          }
+        }
+        """
+        # Linear prefers Archive for projects usually, but projectDelete also exists.
+        # Let's try Delete first as requested, but Archive is safer if Delete isn't what they want.
+        # Actually, let's use projectDelete as it's a "Delete" request.
+        mutation_delete = """
+        mutation ProjectDelete($id: String!) {
+          projectDelete(id: $id) {
+            success
+          }
+        }
+        """
+        data = self._query(mutation_delete, {"id": project_id})
+        return data.get("projectDelete", {}).get("success", False)

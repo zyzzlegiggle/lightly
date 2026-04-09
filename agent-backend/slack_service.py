@@ -13,10 +13,18 @@ class SlackService:
 
     def post_message(self, channel: str, text: str) -> dict:
         """Post a message to a channel (ID or name)."""
+        # If it looks like a name (e.g. #general or general), try to find the ID
+        target_channel = channel
+        if not (channel.startswith("C") or channel.startswith("D") or channel.startswith("G")):
+            clean_name = channel.lstrip("#")
+            found_id = self._find_channel_id(clean_name)
+            if found_id:
+                target_channel = found_id
+
         resp = requests.post(
             "https://slack.com/api/chat.postMessage",
             headers=self.headers,
-            json={"channel": channel, "text": text},
+            json={"channel": target_channel, "text": text},
             timeout=30,
         )
         resp.raise_for_status()
@@ -86,3 +94,25 @@ class SlackService:
             return match["id"] if match else None
         except Exception:
             return None
+
+    def get_channel_name(self, channel_id: str) -> str:
+        """Get the name of a channel from its ID."""
+        # If it's already a name (doesn't start with Slack ID prefix), return it
+        if not (channel_id.startswith("C") or channel_id.startswith("D") or channel_id.startswith("G")):
+            return channel_id
+        
+        try:
+            # First check list_channels to avoid extra API hits if we already have it
+            # (or just call conversations.info which is more direct for a single ID)
+            resp = requests.get(
+                "https://slack.com/api/conversations.info",
+                headers=self.headers,
+                params={"channel": channel_id},
+                timeout=30,
+            )
+            data = resp.json()
+            if data.get("ok"):
+                return data["channel"].get("name", channel_id)
+            return channel_id
+        except Exception:
+            return channel_id

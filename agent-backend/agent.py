@@ -71,7 +71,8 @@ PLAN_PROMPT = (
     "1. Pick the SINGLE best service. If you need to search for something to act, use `search` or `list` first.\n"
     "2. If requested to 'Add task to In Progress', find the 'In Progress' state ID from board context and use it in `linear_create_propose`.\n"
     "3. RICH MENTIONS: Use `[notion:Title|URL]` or `[linear:Title|URL]` when referencing items you found. Example: 'I've added the [linear:Fix Header Bug|https://linear.app/...] task.'\n"
-    "4. NOTION NOTES: Use CLEAN MARKDOWN (## for headings, - for bullets, **bold**) in the `content` field. DO NOT wrap the content in extra quotes, apostrophes, or code blocks (` ``` `) within the JSON string.\n\n"
+    "4. NOTION NOTES: Use CLEAN MARKDOWN (## for headings, - for bullets, **bold**) in the `content` field. DO NOT wrap the content in extra quotes, apostrophes, or code blocks (` ``` `) within the JSON string.\n"
+    "5. SLACK CHANNELS: Use the specific channel ID from context if provided. If not, and you don't know the channel name, use `slack_list_channels` first. NEVER guess a channel name.\n\n"
     "## Generic Scoping Rules:\n"
     "1. Pick the SINGLE best tool for the user's request.\n"
     "2. CRITICAL: If a service is NOT CONNECTED, you MUST STILL output the tool call JSON. The system will then automatically show a 'Connect' button for the user. NEVER say you cannot access a service with plain text.\n"
@@ -99,7 +100,7 @@ PLAN_PROMPT = (
     "SLACK:\n"
     '  {"slack_list_channels": {}}\n'
     '  {"slack_history": {"channel": "channel-id", "limit": 10}}\n'
-    '  {"slack_send_propose": {"channel": "general", "text": "..."}}\n\n'
+    '  {"slack_send_propose": {"channel": "C123456", "text": "..."}}\n\n'
     "GENERAL:\n"
     '  {"clarify": "your helpful response or question", "plan": ""}\n'
 
@@ -701,11 +702,20 @@ def handle_slack_send_propose(req, plan, hist):
         yield sse("done")
         return
     details = plan["slack_send_propose"]
-    channel = details.get("channel", "general")
+    channel = details.get("channel") or req.slackChannelId or "general"
     text = details.get("text", "")
     
+    # Resolve display name for the user
+    display_name = channel
+    try:
+        from slack_service import SlackService
+        slack = SlackService(req.slackAccessToken)
+        display_name = slack.get_channel_name(channel)
+    except:
+        pass
+
     yield sse("message", 
-        content=f"I'll send this message to Slack (**#{channel}**):\n\n{text}",
+        content=f"I'll send this message to Slack (**#{display_name}**):\n\n{text}",
         actions=[{
             "label": "Send Message", 
             "icon": "slack", 
@@ -727,7 +737,7 @@ def handle_slack_send(req, plan, hist):
         return
         
     details = plan["slack_send"]
-    channel = details.get("channel")
+    channel = details.get("channel") or req.slackChannelId
     text = details.get("text")
     
     try:
@@ -792,15 +802,18 @@ def handle_slack_history(req, plan, hist):
         return
 
     details = plan["slack_history"]
-    channel = details.get("channel", "")
+    channel = details.get("channel") or req.slackChannelId or ""
     limit = details.get("limit", 10)
-    yield sse("status", content=f"Fetching messages from #{channel}...")
+    
     try:
         from slack_service import SlackService
         slack = SlackService(req.slackAccessToken)
+        display_name = slack.get_channel_name(channel)
+        yield sse("status", content=f"Fetching messages from #{display_name}...")
+        
         messages = slack.get_channel_history(channel, limit)
         if not messages:
-            yield sse("message", content=f"No recent messages in #{channel}.")
+            yield sse("message", content=f"No recent messages in #{display_name}.")
             yield sse("done")
             return
 

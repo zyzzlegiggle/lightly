@@ -176,5 +176,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return Response.json({ success: true, project });
   }
 
+  if (action === "deleteProject") {
+      const { projectId } = body;
+      if (!projectId) return Response.json({ error: "Missing projectId" }, { status: 400 });
+      const backendUrl = process.env.AGENT_BACKEND_URL || "http://localhost:8080";
+      const deleteResp = await fetch(`${backendUrl}/api/linear/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+              token: result.ctx.linearAccessToken,
+              projectId
+          })
+      });
+      const data = await deleteResp.json();
+      return Response.json(data);
+  }
+
   return Response.json({ error: "Invalid action" }, { status: 400 });
 }

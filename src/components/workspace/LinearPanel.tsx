@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { BoardSkeleton } from "./LoaderComponents";
+import { DeleteConfirmModal } from "../DeleteConfirmModal";
 
 interface Issue {
   id: string;
@@ -111,6 +112,32 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
       toast.error("Failed to fetch Linear data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [pToDelete, setPToDelete] = useState<{ id: string, name: string } | null>(null);
+
+  const handleDeleteProject = async () => {
+    if (!pToDelete) return;
+    const pId = pToDelete.id;
+    
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/linear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deleteProject", projectId: pId })
+      });
+      if (resp.ok) {
+        setAllProjects(prev => prev.filter(p => p.id !== pId));
+        toast.success("Project deleted successfully");
+      } else {
+        toast.error("Failed to delete project");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete project");
+    } finally {
+      setPToDelete(null);
     }
   };
 
@@ -351,7 +378,7 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
   const columns = states.filter(s => ["unstarted", "started", "completed"].includes(s.type));
 
   return (
-    <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
+    <div className="flex-1 h-full flex flex-col bg-white overflow-hidden relative">
       {/* Header */}
       <div className="h-10 border-b border-zinc-100 bg-white px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -431,7 +458,18 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">
                           {p.teams?.nodes?.[0]?.key || "PRJ"}
                         </span>
-                        <div className="w-1.5 h-1.5 rounded-full bg-zinc-200 group-hover:bg-zinc-900 transition-colors" />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPToDelete({ id: p.id, name: p.name }); }}
+                            className="p-1.5 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                            title="Delete Project"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-200 group-hover:bg-zinc-900 transition-colors" />
+                        </div>
                       </div>
                       <h3 className="text-[13px] font-bold text-zinc-800 mb-1 group-hover:text-zinc-950">{p.name}</h3>
                       <p className="text-[11px] text-zinc-400 line-clamp-1 mb-3">{p.description || "No description provided."}</p>
@@ -463,12 +501,12 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-x-auto p-4 flex gap-4 items-start bg-zinc-50/10">
+        <div className="flex-1 overflow-x-auto p-4 flex gap-4 items-stretch bg-zinc-50/10">
           <div className="absolute top-4 left-4 h-full pointer-events-none border-l border-zinc-100" />
           {columns.map(column => (
             <div 
               key={column.id} 
-              className="w-64 shrink-0 flex flex-col gap-3 relative z-10"
+              className="w-72 shrink-0 flex flex-col gap-3 relative z-10 h-full"
               onDragOver={onDragOver}
               onDrop={(e) => onDrop(e, column.id)}
             >
@@ -482,7 +520,7 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2.5 min-h-[200px]">
+              <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto min-h-0 pr-1 pb-4 scrollbar-hide hover:scrollbar-default">
                 {issues.filter(i => i.state.id === column.id).map(issue => (
                   editingIssueId === issue.id ? (
                     <div key={issue.id} className="bg-white border-2 border-zinc-900 p-3 rounded-2xl shadow-xl animate-in fade-in scale-95 duration-200">
@@ -707,6 +745,13 @@ export function LinearPanel({ projectId, refreshKey }: LinearPanelProps) {
             </div>
         </div>
       )}
+       <DeleteConfirmModal 
+         isOpen={!!pToDelete}
+         onClose={() => setPToDelete(null)}
+         onConfirm={handleDeleteProject}
+         title="Delete Linear Project?"
+         itemName={pToDelete?.name || ""}
+       />
     </div>
   );
 }

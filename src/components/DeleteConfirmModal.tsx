@@ -2,14 +2,23 @@
 
 import { useState } from "react";
 
-interface DeleteProjectModalProps {
+interface DeleteConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
-  projectName: string;
+  title?: string;
+  description?: string;
+  itemName?: string;
 }
 
-export function DeleteProjectModal({ isOpen, onClose, onConfirm, projectName }: DeleteProjectModalProps) {
+export function DeleteConfirmModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title = "Delete Item?", 
+  description = "Are you sure you want to delete this? This action cannot be undone.",
+  itemName 
+}: DeleteConfirmModalProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
 
@@ -20,7 +29,7 @@ export function DeleteProjectModal({ isOpen, onClose, onConfirm, projectName }: 
       await onConfirm();
       onClose();
     } catch (err: any) {
-      setError(err.message || "Failed to delete project");
+      setError(err.message || "Failed to delete item");
     } finally {
       setIsDeleting(false);
     }
@@ -29,18 +38,18 @@ export function DeleteProjectModal({ isOpen, onClose, onConfirm, projectName }: 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md transition-opacity duration-300">
-      <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-zinc-100 flex flex-col animate-slide-up">
-        <div className="flex flex-col items-center text-center mb-8">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md transition-opacity duration-300">
+      <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-zinc-100 flex flex-col scale-in-center overflow-hidden">
+        <div className="flex flex-col items-center text-center mb-8 relative">
           <div className="w-16 h-16 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
             <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </div>
 
-          <h2 className="text-2xl font-bold tracking-tight text-zinc-900 mb-2">Delete Project?</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-zinc-900 mb-2">{title}</h2>
           <p className="text-sm text-zinc-500 leading-relaxed max-w-[280px]">
-            Are you sure you want to delete <span className="font-bold text-zinc-900">{projectName}</span>? This action cannot be undone.
+            {description} {itemName && <><br/><span className="font-bold text-zinc-900">{itemName}</span></>}
           </p>
         </div>
 
@@ -49,13 +58,13 @@ export function DeleteProjectModal({ isOpen, onClose, onConfirm, projectName }: 
             <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <p className="text-[13px] text-red-800 leading-relaxed">
-              All associated data will be permanently destroyed.
+            <p className="text-[13px] text-red-800 leading-relaxed font-medium">
+              This action is permanent and cannot be reversed.
             </p>
           </div>
 
           {error && (
-            <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-xs rounded-xl animate-in shake-in">
+            <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-xs rounded-xl animate-shake">
               {error}
             </div>
           )}

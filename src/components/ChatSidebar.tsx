@@ -560,11 +560,25 @@ export function ChatSidebar({
                                   const successUrl = actionSuccessUrls[actionId];
                                   const isConfirmed = confirmedActionIds.has(actionId);
 
-                                  const getSuccessLabel = (label: string) => {
-                                    const low = label.toLowerCase();
-                                    if (low.includes("slack") || low.includes("send")) return "Open Slack";
-                                    if (low.includes("notion") || low.includes("note") || low.includes("add")) return "Open Notion";
-                                    if (low.includes("linear") || low.includes("issue") || low.includes("create")) return "Open Linear";
+                                  const getSuccessLabel = (action: ChatAction) => {
+                                    if (action.icon === "slack") return "Open Slack";
+                                    if (action.icon === "notion") return "Open Notion";
+                                    if (action.icon === "linear") return "Open Linear";
+                                    if (action.icon === "calendar") return "Open Calendar";
+                                    if (action.icon === "email") return "Open Gmail";
+
+                                    const low = action.label.toLowerCase();
+                                    if (low.includes("slack")) return "Open Slack";
+                                    if (low.includes("notion")) return "Open Notion";
+                                    if (low.includes("linear")) return "Open Linear";
+                                    if (low.includes("calendar")) return "Open Calendar";
+                                    if (low.includes("gmail") || low.includes("email")) return "Open Gmail";
+
+                                    // Specific fallback for common verbs
+                                    if (low.includes("send") && !low.includes("email")) return "Open Slack";
+                                    if (low.includes("add") && low.includes("note")) return "Open Notion";
+                                    if (low.includes("create") && low.includes("issue")) return "Open Linear";
+
                                     return "Open in Service";
                                   };
 
@@ -610,7 +624,7 @@ export function ChatSidebar({
                                       >
                                         {successUrl ? (
                                           <span className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
-                                            {getSuccessLabel(action.label)}
+                                            {getSuccessLabel(action)}
                                           </span>
                                         ) : isConfirmed ? (
                                           <span className="flex items-center gap-1.5">
@@ -669,6 +683,15 @@ export function ChatSidebar({
                                     </div>
                                   );
                                 })}
+                                {msg.actions.some(a => a.label.toLowerCase().includes("connect") || a.url?.includes("/api/auth/")) && (
+                                  <div className="w-full mt-2.5 flex items-center gap-2 px-0.5 opacity-40">
+                                    <div className="flex-1 h-px bg-zinc-200" />
+                                    <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-[0.15em] whitespace-nowrap">
+                                      Powered by Auth0 Token Vault
+                                    </span>
+                                    <div className="flex-1 h-px bg-zinc-200" />
+                                  </div>
+                                )}
                               </div>
                             )}
                           </>

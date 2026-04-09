@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CardSkeleton, BlockSkeleton } from "./LoaderComponents";
+import { DeleteConfirmModal } from "../DeleteConfirmModal";
+import { toast } from "react-hot-toast";
 
 interface NotionPage {
   id: string;
@@ -57,6 +59,7 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [creatingNote, setCreatingNote] = useState(false);
   const [initing, setIniting] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<{ id: string, title: string } | null>(null);
 
   // Check connection
   useEffect(() => {
@@ -176,8 +179,9 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
   };
 
   // Delete note
-  const deleteNote = async (noteId: string) => {
-    if (!confirm("Delete this note?")) return;
+  const handleDeleteNote = async () => {
+    if (!noteToDelete) return;
+    const noteId = noteToDelete.id;
     try {
       await fetch(`/api/projects/${projectId}/notion`, {
         method: "POST",
@@ -189,7 +193,12 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
         setEditingNote(null);
         setEditorBlocks([]);
       }
-    } catch {}
+      toast.success("Note deleted");
+    } catch {
+      toast.error("Failed to delete note");
+    } finally {
+      setNoteToDelete(null);
+    }
   };
 
   // Block editor helpers
@@ -549,7 +558,7 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
                   </p>
                 </button>
                 <button
-                  onClick={() => deleteNote(note.id)}
+                  onClick={() => setNoteToDelete({ id: note.id, title: note.title })}
                   className="opacity-0 group-hover:opacity-100 p-1 text-zinc-300 hover:text-red-400 rounded-md transition-all shrink-0"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -561,6 +570,13 @@ export function NotionPanel({ projectId, refreshKey }: NotionPanelProps) {
           </div>
         )}
       </div>
+      <DeleteConfirmModal 
+        isOpen={!!noteToDelete}
+        onClose={() => setNoteToDelete(null)}
+        onConfirm={handleDeleteNote}
+        title="Delete Notion Note?"
+        itemName={noteToDelete?.title || ""}
+      />
     </div>
   );
 }

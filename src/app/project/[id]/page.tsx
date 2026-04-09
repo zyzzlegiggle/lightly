@@ -423,23 +423,23 @@ export default function WorkspacePage() {
           />
         </div>
         
-        <div className={activeTab === "gmail" ? "block" : "hidden"}>
+        <div className={activeTab === "gmail" ? "block h-full" : "hidden"}>
           <GmailPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
         
-        <div className={activeTab === "calendar" ? "block" : "hidden"}>
+        <div className={activeTab === "calendar" ? "block h-full" : "hidden"}>
           <CalendarPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
 
-        <div className={activeTab === "slack" ? "block" : "hidden"}>
+        <div className={activeTab === "slack" ? "block h-full" : "hidden"}>
           <SlackPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
 
-        <div className={activeTab === "linear" ? "block" : "hidden"}>
+        <div className={activeTab === "linear" ? "block h-full" : "hidden"}>
           <LinearPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
 
-        <div className={activeTab === "notion" ? "block" : "hidden"}>
+        <div className={activeTab === "notion" ? "block h-full" : "hidden"}>
           <NotionPanel projectId={projectId} refreshKey={refreshKey} />
         </div>
 

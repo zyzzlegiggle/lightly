@@ -278,6 +278,15 @@ async def get_linear_members(req: LinearMemberRequest):
     from linear_service import LinearService
     return {"members": LinearService(req.token).get_team_members(req.teamId)}
 
+class LinearDeleteRequest(BaseModel):
+    token: str
+    projectId: str
+
+@app.post("/api/linear/delete")
+async def linear_delete(req: LinearDeleteRequest):
+    from linear_service import LinearService
+    return {"success": LinearService(req.token).delete_project(req.projectId)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 
 interface SlackWorkspace {
   id: string;
@@ -31,6 +32,7 @@ export default function SettingsPageClient({
   const [loadingSlack, setLoadingSlack] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [githubLinked, setGithubLinked] = useState<boolean | null>(null); // null = loading
+  const [showLogoutAllModal, setShowLogoutAllModal] = useState(false);
 
   const googleConnected = connectedProviders.includes("google-oauth2");
 
@@ -73,10 +75,8 @@ export default function SettingsPageClient({
   };
 
   const handleLogoutAll = async () => {
-    if (confirm("Are you sure you want to disconnect ALL services?")) {
-      await fetch("/api/auth/logout-all", { method: "DELETE" });
-      window.location.reload();
-    }
+    await fetch("/api/auth/logout-all", { method: "DELETE" });
+    window.location.reload();
   };
 
   const handleSignOut = () => {
@@ -405,7 +405,7 @@ export default function SettingsPageClient({
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium text-text-primary">Disconnect all services</div>
               <button
-                onClick={handleLogoutAll}
+                onClick={() => setShowLogoutAllModal(true)}
                 className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 text-sm font-bold rounded-lg transition-colors"
               >
                 Logout All
@@ -423,6 +423,14 @@ export default function SettingsPageClient({
           </div>
         </div>
       </section>
+
+      <DeleteConfirmModal 
+        isOpen={showLogoutAllModal}
+        onClose={() => setShowLogoutAllModal(false)}
+        onConfirm={handleLogoutAll}
+        title="Disconnect All Services?"
+        description="This will unlink your Google, Slack, Notion, and Linear accounts from Lightly. You will need to reconnect them manually."
+      />
     </div>
   );
 }
