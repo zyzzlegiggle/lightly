@@ -119,7 +119,7 @@ def main():
     print("\n[1/5] Creating temporary Droplet...")
     data = api("POST", "/droplets", json={
         "name": "lightly-snapshot-builder",
-        "region": "nyc3",
+        "region": "sfo3",
         "size": "s-1vcpu-2gb",
         "image": "ubuntu-22-04-x64",
         "user_data": SNAPSHOT_SETUP_SCRIPT,

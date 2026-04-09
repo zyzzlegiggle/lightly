@@ -21,7 +21,7 @@ set -euo pipefail
 
 # ── Config ──
 DO_TOKEN="${GRADIENT_ACCESS_TOKEN:?Set GRADIENT_ACCESS_TOKEN first}"
-REGION="nyc3"
+REGION="sfo3"
 SIZE="s-1vcpu-512mb-10gb"  # $4/mo — tiny is fine, it's just proxying
 IMAGE="ubuntu-22-04-x64"
 NAME="lightly-gateway"

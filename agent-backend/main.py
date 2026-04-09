@@ -149,7 +149,7 @@ def create_droplet(name: str, user_data: str) -> dict:
     image = snapshot_id if snapshot_id else "ubuntu-22-04-x64"
     payload = {
         "name": f"lightly-{app_name}",
-        "region": "nyc3", "size": "s-1vcpu-2gb", "image": image,
+        "region": "sfo3", "size": "s-1vcpu-2gb", "image": image,
         "user_data": user_data, "tags": ["lightly"],
     }
     resp = requests.post("https://api.digitalocean.com/v2/droplets",
