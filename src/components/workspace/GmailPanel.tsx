@@ -7,6 +7,7 @@ interface GmailMessage {
   id: string;
   subject: string;
   from: string;
+  to: string;
   date: string;
   snippet: string;
   unread: boolean;
@@ -84,6 +85,7 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
   const [loadingMessage, setLoadingMessage] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [folder, setFolder] = useState<"inbox" | "sent">("inbox");
 
   // Compose state
   const [composeTo, setComposeTo] = useState("");
@@ -105,7 +107,7 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
     setLoadingMessages(true);
     setLoadError(null);
     try {
-      const query = q !== undefined ? q : activeSearch || "label:INBOX";
+      const query = q !== undefined ? q : activeSearch || (folder === "sent" ? "label:SENT" : "label:INBOX");
       const res = await fetch(`/api/gmail/messages?q=${encodeURIComponent(query)}&maxResults=25`);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -120,16 +122,16 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
     } finally {
       setLoadingMessages(false);
     }
-  }, [activeSearch]);
+  }, [activeSearch, folder]);
 
   useEffect(() => {
     if (connected) loadMessages();
-  }, [connected, refreshKey]);
+  }, [connected, folder, refreshKey, loadMessages]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setActiveSearch(searchQuery);
-    loadMessages(searchQuery || "label:INBOX");
+    loadMessages(searchQuery || (folder === "sent" ? "label:SENT" : "label:INBOX"));
   };
 
   const openMessage = async (id: string) => {
@@ -207,10 +209,26 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
           <span className="text-sm font-semibold text-zinc-800">
-            {view === "inbox" ? "Gmail" : view === "reading" ? "Email" : "New Email"}
+            {view === "inbox" ? (folder === "inbox" ? "Inbox" : "Sent") : view === "reading" ? "Email" : "New Email"}
           </span>
         </div>
       </div>
+      {view === "inbox" && (
+        <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 p-0.5 rounded-lg shrink-0">
+          <button
+            onClick={() => { setFolder("inbox"); setActiveSearch(""); setSearchQuery(""); }}
+            className={`px-2 py-1 text-[10px] font-bold uppercase transition-all rounded-md ${folder === "inbox" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"}`}
+          >
+            Inbox
+          </button>
+          <button
+            onClick={() => { setFolder("sent"); setActiveSearch(""); setSearchQuery(""); }}
+            className={`px-2 py-1 text-[10px] font-bold uppercase transition-all rounded-md ${folder === "sent" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"}`}
+          >
+            Sent
+          </button>
+        </div>
+      )}
       {view === "inbox" && (
         <div className="flex items-center gap-1">
           <button
@@ -328,7 +346,7 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
                     <div className="flex items-center gap-1.5 min-w-0">
                       {msg.unread && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />}
                       <p className={`text-[12px] truncate ${msg.unread ? "font-bold text-zinc-900" : "font-medium text-zinc-700"}`}>
-                        {parseSender(msg.from)}
+                        {folder === "sent" ? `To: ${parseSender(msg.to)}` : parseSender(msg.from)}
                       </p>
                     </div>
                     <span className="text-[10px] text-zinc-400 shrink-0 mt-0.5">{formatDate(msg.date)}</span>
@@ -336,7 +354,10 @@ export function GmailPanel({ projectId, refreshKey }: GmailPanelProps) {
                   <p className={`text-[11px] truncate mb-0.5 ${msg.unread ? "font-semibold text-zinc-800" : "text-zinc-600"}`}>
                     {msg.subject}
                   </p>
-                  <p className="text-[10px] text-zinc-400 truncate leading-relaxed">{msg.snippet}</p>
+                  <div className="flex items-center gap-2">
+                    {folder === "sent" && <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-tighter bg-zinc-100 px-1 rounded">Sent</span>}
+                    <p className="text-[10px] text-zinc-400 truncate leading-relaxed flex-1">{msg.snippet}</p>
+                  </div>
                 </button>
               ))}
             </div>

@@ -98,9 +98,11 @@ export async function GET(req: Request) {
   console.log("[Gmail] Listing with query:", q);
   const params: Record<string, string> = { maxResults: String(maxResults) };
   
-  // Use labelIds for the default inbox view to support restricted scopes (like gmail.metadata)
+  // Use labelIds for the default inbox/sent views to support restricted scopes (like gmail.metadata)
   if (q === "label:INBOX") {
     params.labelIds = "INBOX";
+  } else if (q === "label:SENT") {
+    params.labelIds = "SENT";
   } else {
     params.q = q;
   }
@@ -124,12 +126,7 @@ export async function GET(req: Request) {
   const messages = await Promise.all(
     messageIds.map(async (id) => {
       // Use format=metadata to get headers plus snippet/labels
-      const query = new URLSearchParams({
-        format: "metadata",
-        metadataHeaders: ["Subject", "From", "Date"] as any
-      });
-      // URLSearchParams repeated keys work like this:
-      const fullUrl = `${GMAIL_BASE}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`;
+      const fullUrl = `${GMAIL_BASE}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`;
       
       const r = await fetch(fullUrl, { headers: authHeaders });
       if (!r.ok) return null;
@@ -139,6 +136,7 @@ export async function GET(req: Request) {
         id: m.id,
         subject: hdrs["subject"] || "(no subject)",
         from: hdrs["from"] || "",
+        to: hdrs["to"] || "",
         date: hdrs["date"] || "",
         snippet: m.snippet || "",
         unread: m.labelIds?.includes("UNREAD") ?? false,

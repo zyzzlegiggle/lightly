@@ -13,13 +13,10 @@ class SlackService:
 
     def post_message(self, channel: str, text: str) -> dict:
         """Post a message to a channel (ID or name)."""
-        # If it looks like a name (e.g. #general or general), try to find the ID
-        target_channel = channel
-        if not (channel.startswith("C") or channel.startswith("D") or channel.startswith("G")):
-            clean_name = channel.lstrip("#")
-            found_id = self._find_channel_id(clean_name)
-            if found_id:
-                target_channel = found_id
+        # Resolve to ID
+        target_channel, _ = self.resolve_channel(channel)
+        if not target_channel:
+            raise Exception(f"Slack channel '{channel}' not found.")
 
         resp = requests.post(
             "https://slack.com/api/chat.postMessage",
@@ -32,6 +29,35 @@ class SlackService:
         if not data.get("ok"):
             raise Exception(f"Slack chat.postMessage failed: {data.get('error')}")
         return data
+
+    def resolve_channel(self, channel: str) -> tuple[Optional[str], Optional[str]]:
+        """Resolve a channel string (ID or name) to (id, name)."""
+        # If it looks like an ID
+        if channel.startswith("C") or channel.startswith("D") or channel.startswith("G"):
+            name = self.get_channel_name(channel)
+            if name != channel: # Found
+                return channel, name
+            # If get_channel_name returned the ID back, it might still be valid or not
+            # Let's verify with conversations.info
+            try:
+                resp = requests.get(
+                    "https://slack.com/api/conversations.info",
+                    headers=self.headers,
+                    params={"channel": channel},
+                    timeout=5
+                )
+                if resp.json().get("ok"):
+                    return channel, resp.json()["channel"].get("name", "unknown")
+            except:
+                pass
+            return None, None
+
+        # Try as name
+        clean_name = channel.lstrip("#")
+        found_id = self._find_channel_id(clean_name)
+        if found_id:
+            return found_id, clean_name
+        return None, None
 
     def list_channels(self, limit: int = 100) -> list[dict]:
         """List public and private channels the bot is a member of."""

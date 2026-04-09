@@ -705,14 +705,23 @@ def handle_slack_send_propose(req, plan, hist):
     channel = details.get("channel") or req.slackChannelId or "general"
     text = details.get("text", "")
     
-    # Resolve display name for the user
+    # Resolve display name for the user and validate existence
     display_name = channel
+    real_id = None
     try:
         from slack_service import SlackService
         slack = SlackService(req.slackAccessToken)
-        display_name = slack.get_channel_name(channel)
+        real_id, display_name = slack.resolve_channel(channel)
     except:
         pass
+
+    if not real_id:
+        yield sse("message", 
+            content=f"⚠️ I couldn't find a Slack channel or user named '**{channel}**'. Would you like me to list your channels?",
+            actions=[{"label": "List Channels", "confirmAction": "slack_list_channels", "icon": "slack"}]
+        )
+        yield sse("done")
+        return
 
     yield sse("message", 
         content=f"I'll send this message to Slack (**#{display_name}**):\n\n{text}",
@@ -721,7 +730,7 @@ def handle_slack_send_propose(req, plan, hist):
             "icon": "slack", 
             "tab": "slack",
             "confirmAction": "slack_send", 
-            "params": {"channel": channel, "text": text}
+            "params": {"channel": real_id, "text": text}
         }]
     )
     yield sse("done")
@@ -1096,8 +1105,15 @@ def run_agent(req: AgentChatRequest):
             services_context += "\n- Linear (not connected)"
 
         if req.slackAccessToken:
-            slack_info = f" (Channel: {req.slackChannelId})" if req.slackChannelId else ""
-            services_context += f"\n- Slack (connected){slack_info}"
+            slack_info = f" (Active: {req.slackChannelId})" if req.slackChannelId else ""
+            try:
+                from slack_service import SlackService
+                slack = SlackService(req.slackAccessToken)
+                channels = slack.list_channels(limit=15)
+                channel_list = ", ".join([f"#{c['name']} ({c['id']})" for c in channels])
+                services_context += f"\n- Slack (connected) {slack_info}. Available channels: {channel_list}"
+            except:
+                services_context += f"\n- Slack (connected){slack_info}"
         else:
             services_context += "\n- Slack (not connected)"
 
