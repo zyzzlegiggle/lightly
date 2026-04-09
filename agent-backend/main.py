@@ -208,6 +208,40 @@ async def sync_to_droplet(droplet_id: str, req: ManualSyncRequest):
     resp = requests.post(f"http://{req.dropletIp}:8080/sync", headers={"Authorization": f"Bearer {req.syncToken}"}, json={"changes": req.changes}, timeout=15)
     return {"ok": resp.ok}
 
+# ── Gateway Resolver (for Cloudflare Worker) ─────────────────────────
+@app.get("/api/gateway/resolve/{project_id}")
+async def gateway_resolve(project_id: str, secret: Optional[str] = None):
+    # Security: Ensure only our worker or authenticated requests can resolve IPs
+    # You can set GATEWAY_SECRET in your .env
+    expected_secret = os.getenv("GATEWAY_SECRET", "lightly_secret_123")
+    if secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Invalid gateway secret")
+        
+    token = os.getenv("GRADIENT_ACCESS_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # In a real app, you'd lookup project_id -> doAppId (droplet_id) in a DB.
+    # For now, we assume project_id IS the droplet_id if it's numeric, 
+    # or you can pass the droplet_id directly.
+    droplet_id = project_id 
+    
+    try:
+        resp = requests.get(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers=headers, timeout=5)
+        if not resp.ok:
+            return {"error": "Droplet not found"}
+        
+        droplet = resp.json()["droplet"]
+        ip = next((n["ip_address"] for n in droplet["networks"]["v4"] if n["type"] == "public"), None)
+        
+        return {
+            "projectId": project_id,
+            "dropletIp": ip,
+            "status": droplet["status"]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # Agent Endpoints
 from agent import AgentChatRequest, run_agent, ConfirmRequest, confirm_changes, RevertRequest, revert_changes
 @app.post("/api/agent/chat")
