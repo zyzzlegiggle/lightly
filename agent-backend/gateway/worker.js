@@ -17,8 +17,8 @@ export default {
     const url = new URL(request.url);
     const host = request.headers.get("host") || "";
     
-    // 1. Extract droplet_id from subdomain (e.g., 4612345.preview.lightly.ink)
-    const match = host.match(/^(\d+)\.preview\.lightly\.ink$/);
+    // 1. Extract droplet_id from subdomain (e.g., 4612345-preview.lightly.ink)
+    const match = host.match(/^(\d+)-preview\.lightly\.ink$/);
     if (!match) {
       return new Response("Not Found", { status: 404 });
     }

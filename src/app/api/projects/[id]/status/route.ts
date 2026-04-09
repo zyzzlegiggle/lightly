@@ -51,9 +51,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     
     // If a preview domain is configured, use HTTPS subdomain URLs instead of raw IPs
     // This resolves the mixed-content issue (HTTPS page embedding HTTP iframe)
+    // We use a hyphenated format (e.g., id-preview.lightly.ink) to keep it 
+    // at one subdomain level so Cloudflare Free SSL covers it.
     const previewDomain = process.env.NEXT_PUBLIC_PREVIEW_DOMAIN;
     const resolvedLiveUrl = (previewDomain && dbProject.doAppId)
-      ? `https://${dbProject.doAppId}.${previewDomain}`
+      ? `https://${dbProject.doAppId}-preview.${previewDomain}`
       : backendLiveUrl;
     
     // Persist liveUrl and dropletIp to DB when they become available
