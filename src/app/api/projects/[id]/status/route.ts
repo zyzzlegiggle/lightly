@@ -47,12 +47,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const statusData = await pyResp.json();
     
     // Resolve the best available liveUrl: prefer backend response, fallback to DB
-    const resolvedLiveUrl = statusData.liveUrl || dbProject.lastPreviewUrl || null;
+    const backendLiveUrl = statusData.liveUrl || dbProject.lastPreviewUrl || null;
+    
+    // If a preview domain is configured, use HTTPS subdomain URLs instead of raw IPs
+    // This resolves the mixed-content issue (HTTPS page embedding HTTP iframe)
+    const previewDomain = process.env.NEXT_PUBLIC_PREVIEW_DOMAIN;
+    const resolvedLiveUrl = (previewDomain && dbProject.doAppId)
+      ? `https://${dbProject.doAppId}.${previewDomain}`
+      : backendLiveUrl;
     
     // Persist liveUrl and dropletIp to DB when they become available
     const currentSpec = (dbProject.appSpecRaw as any) || {};
     const needsUpdate = 
-      (resolvedLiveUrl && resolvedLiveUrl !== dbProject.lastPreviewUrl) ||
+      (backendLiveUrl && backendLiveUrl !== dbProject.lastPreviewUrl) ||
       (statusData.dropletIp && statusData.dropletIp !== currentSpec.dropletIp);
     
     if (needsUpdate) {
@@ -61,7 +68,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       
       await db.update(project)
         .set({ 
-          lastPreviewUrl: resolvedLiveUrl || dbProject.lastPreviewUrl,
+          lastPreviewUrl: backendLiveUrl || dbProject.lastPreviewUrl,
           appSpecRaw: updatedSpec,
           updatedAt: new Date(),
         })

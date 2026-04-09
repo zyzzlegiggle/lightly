@@ -1,36 +1,45 @@
+# ── Caddy Gateway for Lightly Preview ──
+# Serves HTTPS for *.preview.lightly.ink subdomains
+# Caddy auto-obtains TLS certificates on-demand via Let's Encrypt
+#
+# How it works:
+#   1. Request comes in for {droplet_id}.preview.lightly.ink
+#   2. Caddy asks the sidecar: "should I issue a cert for this domain?"
+#   3. If yes, Caddy obtains a cert (cached for future use)
+#   4. Caddy extracts the droplet ID from the subdomain
+#   5. Rewrites the request to /proxy/{droplet_id}/{path}
+#   6. Reverse proxies to the sidecar on localhost:8080
+#   7. Sidecar looks up the droplet IP and proxies to http://{ip}:3000
+
 {
-    # Enable On-Demand TLS
     on_demand_tls {
-        # Ask our backend if the domain is allowed
-        # Note: Change 'localhost:8080' to your backend's public address if remote
-        ask http://localhost:8080/api/gateway/check
+        ask http://localhost:8080/check
     }
 }
 
-# The Preview Gateway
-# Replace 'preview.yourdomain.com' with your actual domain
-:443, *.preview.yourdomain.com {
+*.preview.lightly.ink {
     tls {
         on_demand
     }
 
-    # Extract the project ID from the subdomain (e.g. 'foo' from 'foo.preview...')
-    # Assuming the format is {project_id}.preview.yourdomain.com
-    @subdomain header_regexp sub Host ^([^.]+)\.preview\.
-    
+    # Extract the droplet ID from the subdomain
+    # e.g. "12345678" from "12345678.preview.lightly.ink"
+    @subdomain header_regexp sub Host ^([^.]+)\.preview\.lightly\.ink$
+
     handle @subdomain {
-        # Rewrite the request to the backend proxy endpoint
-        # {re.sub.1} is the first capture group (the project ID)
-        rewrite * /api/gateway/proxy/{re.sub.1}{uri}
-        
-        reverse_proxy http://localhost:8080 {
+        # Rewrite to sidecar's proxy endpoint
+        rewrite * /proxy/{re.sub.1}{uri}
+
+        reverse_proxy localhost:8080 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
         }
     }
 
-    # Fallback/Health check
+    # Reject requests that don't match a subdomain pattern
     handle {
-        abort
+        respond "Not found" 404
     }
 }
