@@ -7,7 +7,7 @@ url = "https://api.digitalocean.com/v2/apps"
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 spec = {
     "name": "test-app",
-    "region": "nyc3",
+    "region": "sfo3",
     "services": [{
         "name": "test-app-web",
         "github": {"repo": "zyzzlegiggle/trackpad", "branch": "main"},
