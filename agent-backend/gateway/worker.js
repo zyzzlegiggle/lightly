@@ -54,8 +54,19 @@ export default {
       // 3. Proxy request to Droplet
       const targetUrl = `http://${dropletIp}:3000${path}`;
       
-      // Copy original request but change target
-      const newRequest = new Request(targetUrl, request);
+      // We must create a new header set because we cannot modify the original request's headers directly
+      const newHeaders = new Headers(request.headers);
+      
+      // CRITICAL: Change the Host header to the target IP. 
+      // This prevents Cloudflare Error 1003 (Direct Access Not Allowed)
+      newHeaders.set("Host", `${dropletIp}:3000`);
+      
+      const newRequest = new Request(targetUrl, {
+        method: request.method,
+        headers: newHeaders,
+        body: request.body,
+        redirect: "manual"
+      });
       
       // Fetch from droplet
       const response = await fetch(newRequest);
