@@ -35,27 +35,24 @@ CACHE_TTL = 300  # 5 minutes
 
 
 def resolve_droplet_ip(droplet_id: str) -> str | None:
-    """Look up a droplet's public IPv4 via the DigitalOcean API (cached)."""
+    """Look up a VM instance's public IPv4 via the OCI API (cached)."""
     cached = _ip_cache.get(droplet_id)
     if cached and time.time() - cached[1] < CACHE_TTL:
         return cached[0]
 
     try:
-        req = Request(
-            f"https://api.digitalocean.com/v2/droplets/{droplet_id}",
-            headers={"Authorization": f"Bearer {DO_TOKEN}"},
-        )
-        with urlopen(req, timeout=5) as resp:
-            import json
-            data = json.loads(resp.read())
-            networks = data.get("droplet", {}).get("networks", {}).get("v4", [])
-            ip = next((n["ip_address"] for n in networks if n["type"] == "public"), None)
-            if ip:
-                _ip_cache[droplet_id] = (ip, time.time())
-                log.info(f"Resolved droplet {droplet_id} → {ip}")
+        from oci_helper import get_oci_instance_status_and_ip
+        status = get_oci_instance_status_and_ip(droplet_id)
+        if status["phase"] == "ACTIVE" and status.get("dropletIp"):
+            ip = status["dropletIp"]
+            _ip_cache[droplet_id] = (ip, time.time())
+            log.info(f"Resolved instance {droplet_id} → {ip}")
             return ip
+        else:
+            log.warning(f"Instance {droplet_id} is not ACTIVE or has no IP: {status}")
+            return None
     except Exception as e:
-        log.warning(f"Failed to resolve droplet {droplet_id}: {e}")
+        log.warning(f"Failed to resolve OCI instance {droplet_id}: {e}")
         return None
 
 
@@ -75,8 +72,8 @@ class SidecarHandler(BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         domain = qs.get("domain", [""])[0]
 
-        # Extract the droplet ID from "12345.preview.lightly.ink"
-        pattern = rf"^(\d+)\.{re.escape(PREVIEW_DOMAIN)}$"
+        # Extract the droplet ID (slug) from "lightly-xyz.preview.lightly.ink"
+        pattern = rf"^([a-zA-Z0-9\-]+)\.{re.escape(PREVIEW_DOMAIN)}$"
         m = re.match(pattern, domain)
         if not m:
             self.send_response(404)
@@ -91,8 +88,8 @@ class SidecarHandler(BaseHTTPRequestHandler):
     # ── Proxy to droplet ─────────────────────────────────────────────
     def _handle_proxy(self):
         """Proxy requests matching /proxy/{droplet_id}/... to the droplet."""
-        # Parse: /proxy/12345/some/path
-        m = re.match(r"^/proxy/(\d+)(/.*)?$", self.path.split("?")[0])
+        # Parse: /proxy/lightly-xyz/some/path
+        m = re.match(r"^/proxy/([a-zA-Z0-9\-]+)(/.*)?$", self.path.split("?")[0])
         if not m:
             self.send_response(404)
             self.end_headers()

@@ -127,38 +127,40 @@ def process_repo_sync(req: SyncRequest):
 def upload_to_spaces(file_path, object_name):
     import boto3
     session = boto3.session.Session()
+    
+    # Allow fallback to OCI Object Storage variables, else default to DigitalOcean Spaces
+    endpoint_url = os.getenv("OCI_S3_ENDPOINT")
+    if not endpoint_url:
+        region = os.getenv("SPACES_REGION")
+        endpoint_url = f'https://{region}.digitaloceanspaces.com'
+    else:
+        region = os.getenv("OCI_S3_REGION")
+        
+    access_key = os.getenv("OCI_S3_ACCESS_KEY") or os.getenv("SPACES_ACCESS_KEY")
+    secret_key = os.getenv("OCI_S3_SECRET_KEY") or os.getenv("SPACES_SECRET_KEY")
+    bucket = os.getenv("OCI_S3_BUCKET") or os.getenv("SPACES_BUCKET")
+    
     client = session.client('s3',
-        region_name=os.getenv("SPACES_REGION"),
-        endpoint_url=f'https://{os.getenv("SPACES_REGION")}.digitaloceanspaces.com',
-        aws_access_key_id=os.getenv("SPACES_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("SPACES_SECRET_KEY")
+        region_name=region,
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key
     )
     try:
-        client.upload_file(file_path, os.getenv("SPACES_BUCKET"), object_name)
+        client.upload_file(file_path, bucket, object_name)
         return client.generate_presigned_url('get_object',
-            Params={'Bucket': os.getenv("SPACES_BUCKET"), 'Key': object_name},
+            Params={'Bucket': bucket, 'Key': object_name},
             ExpiresIn=3600)
     except Exception as e:
-        print(f"Spaces upload failed: {e}")
+        print(f"OCI/Spaces upload failed: {e}")
         return None
 
 def create_droplet(name: str, user_data: str) -> dict:
-    token = os.getenv("GRADIENT_ACCESS_TOKEN")
-    app_name = name.lower().replace(" ", "-")[:30]
-    snapshot_id = os.getenv("DROPLET_SNAPSHOT_ID")
-    image = snapshot_id if snapshot_id else "ubuntu-22-04-x64"
-    payload = {
-        "name": f"lightly-{app_name}",
-        "region": "sfo3", "size": "s-1vcpu-2gb", "image": image,
-        "user_data": user_data, "tags": ["lightly"],
-    }
-    resp = requests.post("https://api.digitalocean.com/v2/droplets",
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        json=payload)
-    if not resp.ok:
-        raise Exception(f"DO API error {resp.status_code}: {resp.text}")
-    droplet = resp.json()["droplet"]
-    return {"id": str(droplet["id"]), "name": droplet["name"]}
+    from oci_helper import create_oci_instance
+    inst = create_oci_instance(name, user_data)
+    # Return the display_name (slug) as the 'id' field, so it's stored in Next.js doAppId
+    # and matches the wildcard domain subdomain (e.g. lightly-a1b2c3d4.preview.lightly.ink)
+    return {"id": inst["name"], "name": inst["name"]}
 
 @app.post("/api/projects/sync")
 async def sync_project(req: SyncRequest, background_tasks: BackgroundTasks):
@@ -172,15 +174,15 @@ async def sync_project(req: SyncRequest, background_tasks: BackgroundTasks):
 
 @app.get("/api/projects/{droplet_id}/status")
 async def get_app_status(droplet_id: str):
-    token = os.getenv("GRADIENT_ACCESS_TOKEN")
-    headers = {"Authorization": f"Bearer {token}"}
+    from oci_helper import get_oci_instance_status_and_ip
     try:
-        resp = requests.get(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers=headers, timeout=10)
-        if not resp.ok: return {"phase": "ERROR", "logs": "Droplet API error"}
-        droplet = resp.json()["droplet"]
-        if droplet["status"] != "active": return {"phase": "BUILDING", "logs": "Setting up..."}
-        ip = next((n["ip_address"] for n in droplet["networks"]["v4"] if n["type"] == "public"), None)
-        if not ip: return {"phase": "BUILDING", "logs": "Waiting for IP..."}
+        status = get_oci_instance_status_and_ip(droplet_id)
+        if status["phase"] == "ERROR":
+            return {"phase": "ERROR", "logs": status["logs"]}
+        if status["phase"] != "ACTIVE":
+            return {"phase": "BUILDING", "logs": status["logs"]}
+            
+        ip = status["dropletIp"]
         try:
             health = requests.get(f"http://{ip}:8080/health", timeout=3)
             if not health.ok: return {"phase": "DEPLOYING", "logs": "Sync API booting..."}
@@ -199,9 +201,9 @@ async def get_app_status(droplet_id: str):
 
 @app.delete("/api/droplets/{droplet_id}/destroy")
 async def destroy_droplet(droplet_id: str):
-    token = os.getenv("GRADIENT_ACCESS_TOKEN")
-    resp = requests.delete(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers={"Authorization": f"Bearer {token}"})
-    return {"ok": resp.ok}
+    from oci_helper import terminate_oci_instance
+    ok = terminate_oci_instance(droplet_id)
+    return {"ok": ok}
 
 @app.post("/api/droplets/{droplet_id}/sync")
 async def sync_to_droplet(droplet_id: str, req: ManualSyncRequest):
@@ -217,26 +219,16 @@ async def gateway_resolve(project_id: str, secret: Optional[str] = None):
     if secret != expected_secret:
         raise HTTPException(status_code=401, detail="Invalid gateway secret")
         
-    token = os.getenv("GRADIENT_ACCESS_TOKEN")
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    # In a real app, you'd lookup project_id -> doAppId (droplet_id) in a DB.
-    # For now, we assume project_id IS the droplet_id if it's numeric, 
-    # or you can pass the droplet_id directly.
-    droplet_id = project_id 
-    
+    from oci_helper import get_oci_instance_status_and_ip
     try:
-        resp = requests.get(f"https://api.digitalocean.com/v2/droplets/{droplet_id}", headers=headers, timeout=5)
-        if not resp.ok:
-            return {"error": "Droplet not found"}
-        
-        droplet = resp.json()["droplet"]
-        ip = next((n["ip_address"] for n in droplet["networks"]["v4"] if n["type"] == "public"), None)
+        status = get_oci_instance_status_and_ip(project_id)
+        if status["phase"] == "ERROR":
+            return {"error": status["logs"]}
         
         return {
             "projectId": project_id,
-            "dropletIp": ip,
-            "status": droplet["status"]
+            "dropletIp": status["dropletIp"],
+            "status": "active" if status["phase"] == "ACTIVE" else "provisioning"
         }
     except Exception as e:
         return {"error": str(e)}

@@ -20,6 +20,20 @@ exec > >(tee -a "$LOGFILE") 2>&1
 echo "[Lightly] Starting sandbox setup..."
 START_TIME=$(date +%s)
 
+# ── Configure Firewall (OCI Ubuntu default blocks all ports except 22) ──
+echo "[Lightly] Opening ports 3000 and 8080 in firewall..."
+if command -v iptables &>/dev/null; then
+  iptables -I INPUT 1 -m state --state NEW -p tcp --dport 3000 -j ACCEPT || true
+  iptables -I INPUT 1 -m state --state NEW -p tcp --dport 8080 -j ACCEPT || true
+  if command -v netfilter-persistent &>/dev/null; then
+    netfilter-persistent save || true
+  fi
+fi
+if command -v ufw &>/dev/null; then
+  ufw allow 3000/tcp || true
+  ufw allow 8080/tcp || true
+fi
+
 # ── Swap — skip if already configured (pre-baked snapshot) ──
 if [ ! -f /swapfile ]; then
   echo "[Lightly] Creating swap..."
