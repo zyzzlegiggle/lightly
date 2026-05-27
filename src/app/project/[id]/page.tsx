@@ -29,10 +29,39 @@ export default function WorkspacePage() {
   const [currentPath, setCurrentPath] = useState("/");
   const [pathInput, setPathInput] = useState("/");
   const [isInitializing, setIsInitializing] = useState(true);
+  const [showBypass, setShowBypass] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [iframeStatus, setIframeStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowBypass(true);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleForceDelete = async () => {
+    if (!confirm("Are you sure you want to unlink and delete this project? This will terminate the sandbox VM and reset project data.")) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/delete`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        router.push("/");
+      } else {
+        alert("Failed to delete project");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting project");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // ── Sync active tab with URL ──
   useEffect(() => {
@@ -303,7 +332,31 @@ export default function WorkspacePage() {
             <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden shadow-inner max-w-xs mx-auto">
               <div className="h-full bg-accent-primary animate-[loading-bar_1.5s_infinite]" />
             </div>
-            <p className="text-zinc-500 text-sm font-medium animate-pulse">Initializing workspace</p>
+            <p className="text-zinc-500 text-sm font-medium animate-pulse">
+              {statusData?.logs || "Initializing workspace"}
+            </p>
+            {showBypass && (
+              <div className="pt-6 space-y-3 animate-in fade-in duration-300">
+                <div className="text-xs text-zinc-400 max-w-xs mx-auto">
+                  Taking longer than usual? The VM might be booting up or the backend is currently starting.
+                </div>
+                <div className="flex justify-center gap-3">
+                  <button
+                    onClick={() => setIsInitializing(false)}
+                    className="px-4 py-2 text-xs font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Force Open Workspace
+                  </button>
+                  <button
+                    onClick={handleForceDelete}
+                    disabled={isDeleting}
+                    className="px-4 py-2 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isDeleting ? "Deleting..." : "Unlink & Reset"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

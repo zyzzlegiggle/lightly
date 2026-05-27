@@ -67,6 +67,10 @@ PLAN_PROMPT = (
     "4. EMAILS / EXTERNAL COMMUNICATION -> Gmail ONLY.\n"
     "5. CHAT / TEAM COMMUNICATION -> Slack ONLY.\n"
     "6. PROJECT CODE / UI CHANGES / BUG FIXES -> CODING. Use `files_to_read` to examine relevant files.\n\n"
+    "## Coding & Agentic Development Rules:\n"
+    "1. When the user requests a code change, UI improvement, or new component, use CODING.\n"
+    "2. Always specify all files you need to examine in `files_to_read`. If you edit a file, it must be read first. If you are creating a new file, read adjacent parent/config files to match imports and styles.\n"
+    "3. In the `plan` field, specify a detailed technical explanation of the codebase modifications you will perform.\n\n"
     "## Semantic Intent Rules:\n"
     "1. Pick the SINGLE best service. If you need to search for something to act, use `search` or `list` first.\n"
     "2. If requested to 'Add task to In Progress', find the 'In Progress' state ID from board context and use it in `linear_create_propose`.\n"
@@ -80,11 +84,12 @@ PLAN_PROMPT = (
     "## Tools (return ONE)\n\n"
     "CODING:\n"
     '  {"files_to_read": ["path/to/file.tsx"], "plan": "technical explanation of changes"}\n'
-    '  {"gh_open_pr_propose": {"title": "...", "body": "PR description"}}\n\n'
+    '  {"gh_open_pr_propose": {"title": "PR Title", "body": "PR description"}}\n\n'
     "GMAIL:\n"
     '  {"gmail_search": {"query": "...", "max_results": 5}}\n'
     '  {"gmail_read": {"message_id": "..."}}\n'
-    '  {"gmail_send_propose": {"to": "email@example.com", "subject": "...", "body": "full email body"}}\n\n'
+    '  {"gmail_send_propose": {"to": "email@example.com", "subject": "...", "body": "full email body"}}\n'
+    '  {"gmail_reply_propose": {"message_id": "...", "body": "reply body"}}\n\n'
     "NOTION:\n"
     '  {"notion_search": {"query": "..."}}\n'
     '  {"notion_add_note_propose": {"title": "...", "content": "## Section\\n- Point 1\\n- **Point 2**"}}\n\n'
@@ -100,10 +105,9 @@ PLAN_PROMPT = (
     "SLACK:\n"
     '  {"slack_list_channels": {}}\n'
     '  {"slack_history": {"channel": "channel-id", "limit": 10}}\n'
-    '  {"slack_send_propose": {"channel": "C123456", "text": "..."}}\n\n'
+    '  {"slack_send_propose": {"channel": "channel-id-or-name", "text": "..."}}\n\n'
     "GENERAL:\n"
     '  {"clarify": "your helpful response or question", "plan": ""}\n'
-
 )
 
 EDIT_PROMPT = (
@@ -112,10 +116,11 @@ EDIT_PROMPT = (
     "## Rules\n"
     "1. Focus changes on what affects the user's current page unless told otherwise.\n"
     "2. Each change MUST include the COMPLETE file content — never partial snippets or diffs.\n"
-    "3. If uploaded images/mockups are referenced, recreate the design using the project's tech stack.\n"
-    "4. Preserve all existing functionality unless explicitly asked to remove it.\n"
-    "5. Write clean, production-quality code. Follow existing patterns and naming conventions.\n"
-    "6. If the request is ambiguous, ask for clarification instead of guessing.\n\n"
+    "3. Use Rich Aesthetics for UI changes: Harmonious color palettes, smooth hover/interactive animations, clean typography, dynamic layout alignment, and beautiful spacing.\n"
+    "4. Do NOT use mock, fake, or non-existent import paths. Keep import declarations fully aligned with existing codebase structure.\n"
+    "5. Preserve all existing functionality unless explicitly asked to remove it.\n"
+    "6. Write clean, production-quality code. Follow existing patterns and naming conventions.\n"
+    "7. If the request is ambiguous, ask for clarification instead of guessing.\n\n"
     "## Output\n"
     '{"changes": [{"file": "relative/path", "content": "COMPLETE file content", "description": "short visual description"}], "summary": "friendly summary"}\n\n'
     "## description field — keep non-technical and visual:\n"
@@ -952,7 +957,7 @@ def handle_linear_move_issue_propose(req, plan, hist):
         )
         yield sse("done")
         return
-    details = plan["linear_move_issue"]
+    details = plan.get("linear_move_issue_propose") or plan.get("linear_move_issue") or {}
     issue_id = details.get("issue_id")
     state_id = details.get("state_id")
     
@@ -1078,6 +1083,8 @@ def run_agent(req: AgentChatRequest):
                         yield from handle_slack_send(req, plan, [])
                     elif action_name == "calendar_add_event":
                         yield from handle_calendar_add_event(req, plan, [])
+                    elif action_name == "gh_create_pr":
+                        yield from handle_gh_create_pr(req, plan, [])
                     return
             except Exception as e:
                 print(f"[Agent] Confirmation failed: {e}")
@@ -1193,6 +1200,9 @@ def run_agent(req: AgentChatRequest):
             return
         if "calendar_add_event_propose" in plan:
             yield from handle_calendar_add_event_propose(req, plan, hist)
+            return
+        if "gh_open_pr_propose" in plan:
+            yield from handle_gh_open_pr_propose(req, plan, hist)
             return
 
         files_to_read = plan.get("files_to_read", [])[:8]
