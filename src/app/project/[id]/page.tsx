@@ -119,6 +119,9 @@ export default function WorkspacePage() {
           firstFetchDone = true;
           setTimeout(() => setIsInitializing(false), 1000);
         }
+        if (data.phase === "ERROR") {
+          setShowBypass(true);
+        }
         const interval = data.phase === "ACTIVE" ? 30000 : 4000;
         if (active) setTimeout(poll, interval);
       } catch {
