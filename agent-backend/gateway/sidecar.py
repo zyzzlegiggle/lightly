@@ -182,10 +182,6 @@ class SidecarHandler(BaseHTTPRequestHandler):
 # ── Main ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if not DO_TOKEN:
-        log.error("GRADIENT_ACCESS_TOKEN not set!")
-        exit(1)
-
     server = HTTPServer(("0.0.0.0", PORT), SidecarHandler)
     log.info(f"Sidecar listening on :{PORT} (domain: *.{PREVIEW_DOMAIN})")
     server.serve_forever()

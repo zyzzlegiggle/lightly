@@ -31,6 +31,7 @@ def main():
     # Build env file
     env_content = f"""PREVIEW_DOMAIN=preview.lightly.ink
 SIDECAR_PORT=8080
+GRADIENT_ACCESS_TOKEN={os.getenv("GRADIENT_ACCESS_TOKEN", "")}
 OCI_COMPARTMENT_ID={os.getenv("OCI_COMPARTMENT_ID", "")}
 OCI_SUBNET_ID={os.getenv("OCI_SUBNET_ID", "")}
 OCI_SHAPE={os.getenv("OCI_SHAPE", "VM.Standard.E4.Flex")}
@@ -40,8 +41,15 @@ OCI_TENANCY={os.getenv("OCI_TENANCY", "")}
 OCI_REGION={os.getenv("OCI_REGION", "")}
 OCI_FINGERPRINT={os.getenv("OCI_FINGERPRINT", "")}
 """
+    key_write_bash = ""
     if os.getenv("OCI_KEY_CONTENT"):
-        env_content += f"OCI_KEY_CONTENT={os.getenv('OCI_KEY_CONTENT')}\n"
+        env_content += "OCI_KEY_FILE=/opt/oci_key.pem\n"
+        key_write_bash = f"""# ── Write oci_key.pem ──
+cat > /opt/oci_key.pem << 'KEY_EOF'
+{os.getenv("OCI_KEY_CONTENT")}
+KEY_EOF
+chmod 600 /opt/oci_key.pem
+"""
         
     # Build cloud-init bash script
     user_data_template = f"""#!/bin/bash
@@ -60,12 +68,7 @@ cat > /opt/oci_helper.py << 'HELPER_EOF'
 {oci_helper_code}
 HELPER_EOF
 
-# ── Write Caddyfile ──
-mkdir -p /etc/caddy
-cat > /etc/caddy/Caddyfile << 'CADDY_EOF'
-{caddyfile_code}
-CADDY_EOF
-
+{key_write_bash}
 # ── Write environment ──
 cat > /opt/sidecar.env << 'ENV_EOF'
 {env_content}
@@ -89,27 +92,52 @@ WantedBy=multi-user.target
 SVC_EOF
 
 # ── Configure Firewall (OCI Ubuntu default blocks all ports except 22) ──
-echo "[Gateway] Opening port 8080 in firewall..."
+echo "[Gateway] Opening ports 80, 443, and 8080 in firewall..."
 if command -v iptables &>/dev/null; then
+  iptables -I INPUT 1 -m state --state NEW -p tcp --dport 80 -j ACCEPT || true
+  iptables -I INPUT 1 -m state --state NEW -p tcp --dport 443 -j ACCEPT || true
   iptables -I INPUT 1 -m state --state NEW -p tcp --dport 8080 -j ACCEPT || true
   if command -v netfilter-persistent &>/dev/null; then
     netfilter-persistent save || true
   fi
 fi
 if command -v ufw &>/dev/null; then
+  ufw allow 80/tcp || true
+  ufw allow 443/tcp || true
   ufw allow 8080/tcp || true
 fi
 
 # ── Install Caddy and OCI Python SDK ──
-apt-get update -qq
+set +e
+echo "[Gateway] Waiting for apt locks..."
+for i in {{1..30}}; do
+  if apt-get update -qq; then
+    echo "Apt-get update succeeded!"
+    break
+  fi
+  echo "Apt is locked, retrying in 5s ($i/30)..."
+  sleep 5
+done
+set -e
+
 apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl python3 python3-pip python3-venv
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+
+set +e
 apt-get update -qq
+set -e
+
 apt-get install -y -qq caddy
 
-# Install OCI SDK for python3
-pip3 install oci --break-system-packages || pip3 install oci || true
+# Install OCI SDK and python-dotenv for python3
+pip3 install oci python-dotenv --break-system-packages || pip3 install oci python-dotenv || true
+
+# ── Write Caddyfile ──
+mkdir -p /etc/caddy
+cat > /etc/caddy/Caddyfile << 'CADDY_EOF'
+{caddyfile_code}
+CADDY_EOF
 
 # ── Start services ──
 systemctl daemon-reload
@@ -126,7 +154,7 @@ echo "[Gateway] Setup complete!"
     
     compartment_id = os.getenv("OCI_COMPARTMENT_ID")
     subnet_id = os.getenv("OCI_SUBNET_ID")
-    image_id = os.getenv("OCI_IMAGE_ID") or os.getenv("DROPLET_SNAPSHOT_ID")
+    image_id = os.getenv("OCI_BASE_IMAGE_ID")
     shape = os.getenv("OCI_SHAPE", "VM.Standard.E4.Flex")
     
     if not compartment_id or not subnet_id or not image_id:
@@ -150,7 +178,8 @@ echo "[Gateway] Setup complete!"
             assign_public_ip=True
         ),
         metadata={
-            "user_data": encoded_user_data
+            "user_data": encoded_user_data,
+            "ssh_authorized_keys": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDWM+VRTAhnog21dgDa8dxWV7kPQiXFhKDKGkpfvzkct9EmQ4wr7//oU9WrBVPBx6LuGf1IQLED2kCFa7KgJzlOUrPjDGKtpexrHOSi7u9Nyi5EhIf/4ga3NIk8HDPBX/dyFBR0BARcSKhzsdZgMTOnPd6yji3QaBhKI/yFBK0BTsib1wKMd0Ba8ld3ZebgE2BPUMBqhSVcA1T2qkR68MmxUuG+Mk91pvkd9Y1JVWLGbSqT/p4RYXd4Cn5CJIyLHKVj5sJSbB/oBT4vbT0q4pikJn5Z6XudAdcUy5KLEzp4FGIOQQ/D2EDexO0mEwiHxQ2KBRAoEMOChIqyF8yv9KbR josse@bobababob"
         }
     )
     
@@ -182,7 +211,7 @@ echo "[Gateway] Setup complete!"
             sys.exit(1)
             
         if status == "RUNNING":
-            print(f" ✓ Running ({int(time.time() - start)}s)")
+            print(f" - Running ({int(time.time() - start)}s)")
             
             # Fetch VNIC public IP
             print("  Fetching public IP...")
